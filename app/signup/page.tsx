@@ -21,8 +21,7 @@ export default function SignUpPage() {
         password: '',
         confirmPassword: '',
         firstName: '',
-        lastName: '',
-        phoneNumber: ''
+        lastName: ''
     });
     const [isLoading, setIsLoading] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -62,15 +61,6 @@ export default function SignUpPage() {
             newErrors.lastName = 'Last name is required';
         }
 
-        // Phone number validation (optional but if provided, should be valid)
-        if (formData.phoneNumber && formData.phoneNumber.trim()) {
-            const phoneRegex = /^[\+]?[(]?[\d\s\-\(\)]{10,15}$/;
-            const cleanPhone = formData.phoneNumber.replace(/[\s\-\(\)]/g, '');
-            if (cleanPhone.length < 10 || !phoneRegex.test(formData.phoneNumber)) {
-                newErrors.phoneNumber = 'Please enter a valid phone number (at least 10 digits)';
-            }
-        }
-
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -106,8 +96,7 @@ export default function SignUpPage() {
                 email: formData.email,
                 password: formData.password,
                 firstName: formData.firstName.trim(),
-                lastName: formData.lastName.trim(),
-                phoneNumber: formData.phoneNumber.trim() || undefined
+                lastName: formData.lastName.trim()
             });
 
             router.push(`/verify-email?message=check-email&email=${encodeURIComponent(formData.email)}`);
@@ -188,25 +177,6 @@ export default function SignUpPage() {
                                 />
                                 {errors.email && (
                                     <p className="text-xs text-red-600">{errors.email}</p>
-                                )}
-                            </div>
-
-                            {/* Phone Number Field */}
-                            <div className="grid gap-2">
-                                <label htmlFor="phoneNumber" className="text-sm font-medium">
-                                    Phone Number<span className="text-red-500">*</span>
-                                </label>
-                                <Input
-                                    id="phoneNumber"
-                                    name="phoneNumber"
-                                    type="tel"
-                                    placeholder="Enter your phone number"
-                                    value={formData.phoneNumber}
-                                    onChange={handleChange}
-                                    className={errors.phoneNumber ? 'border-red-500' : ''}
-                                />
-                                {errors.phoneNumber && (
-                                    <p className="text-xs text-red-600">{errors.phoneNumber}</p>
                                 )}
                             </div>
 

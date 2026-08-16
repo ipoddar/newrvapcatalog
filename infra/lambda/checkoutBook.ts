@@ -1,10 +1,11 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
-import { ddb, CHECKOUTS_TABLE } from './lib/dynamo';
+import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE } from './lib/dynamo';
 import { requireAuth, HttpError } from './lib/auth';
 import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
+import { sendEmail } from './lib/email';
 
 export async function handler(
   event: APIGatewayProxyEventV2WithJWTAuthorizer
@@ -22,6 +23,8 @@ export async function handler(
       throw new HttpError(400, 'Book ID is required');
     }
 
+    const userEmail = (claims.email as string) ?? '';
+
     try {
       await ddb.send(
         new PutCommand({
@@ -30,7 +33,7 @@ export async function handler(
             bookId,
             userId: sub,
             userName: (claims.name as string) ?? '',
-            userEmail: (claims.email as string) ?? '',
+            userEmail,
             userPhone: (claims.phone_number as string) ?? '',
             checkedOutAt: new Date().toISOString(),
           },
@@ -43,6 +46,17 @@ export async function handler(
       }
       throw err;
     }
+
+    const book = await ddb.send(
+      new GetCommand({ TableName: CATALOG_TABLE, Key: { id: bookId } })
+    );
+    const title = (book.Item?.title as string) ?? 'this book';
+
+    await sendEmail(
+      userEmail,
+      'Checkout confirmation — RVAP Library Catalog',
+      `You have checked out "${title}".\n\nPlease return it when you are done so others can borrow it.\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
+    );
 
     return json(200, { success: true });
   });

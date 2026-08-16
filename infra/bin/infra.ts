@@ -12,7 +12,12 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-const cognitoStack = new CognitoStack(app, 'RvapCognitoStack', { env });
+const sesFromAddress = process.env.SES_FROM_ADDRESS;
+if (!sesFromAddress) {
+  throw new Error('Missing SES_FROM_ADDRESS env var');
+}
+
+const cognitoStack = new CognitoStack(app, 'RvapCognitoStack', { env, sesFromAddress });
 const dataStack = new DataStack(app, 'RvapDataStack', { env });
 const apiStack = new ApiStack(app, 'RvapApiStack', {
   env,
@@ -20,6 +25,7 @@ const apiStack = new ApiStack(app, 'RvapApiStack', {
   checkoutsTable: dataStack.checkoutsTable,
   userPool: cognitoStack.userPool,
   userPoolClient: cognitoStack.userPoolClient,
+  sesFromAddress,
 });
 new SiteStack(app, 'RvapSiteStack', { env });
 

@@ -56,7 +56,6 @@ export function signUp(params: {
   password: string;
   firstName: string;
   lastName: string;
-  phoneNumber?: string;
 }): Promise<{ userConfirmed: boolean }> {
   const attributes = [
     new CognitoUserAttribute({
@@ -64,9 +63,6 @@ export function signUp(params: {
       Value: `${params.firstName} ${params.lastName}`,
     }),
     new CognitoUserAttribute({ Name: 'custom:admin', Value: 'false' }),
-    ...(params.phoneNumber
-      ? [new CognitoUserAttribute({ Name: 'phone_number', Value: params.phoneNumber })]
-      : []),
   ];
 
   return new Promise((resolve, reject) => {

@@ -1,10 +1,24 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { DeleteCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
-import { ddb, CHECKOUTS_TABLE } from './lib/dynamo';
+import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE } from './lib/dynamo';
 import { requireAuth, HttpError } from './lib/auth';
 import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
+import { sendEmail } from './lib/email';
+
+async function sendReturnConfirmation(bookId: string, userEmail: string) {
+  const book = await ddb.send(
+    new GetCommand({ TableName: CATALOG_TABLE, Key: { id: bookId } })
+  );
+  const title = (book.Item?.title as string) ?? 'this book';
+
+  await sendEmail(
+    userEmail,
+    'Return confirmation — RVAP Library Catalog',
+    `You have returned "${title}". Thank you!\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
+  );
+}
 
 export async function handler(
   event: APIGatewayProxyEventV2WithJWTAuthorizer
@@ -33,6 +47,8 @@ export async function handler(
       await ddb.send(
         new DeleteCommand({ TableName: CHECKOUTS_TABLE, Key: { bookId } })
       );
+      const userEmail = (existing.Item.userEmail as string) ?? '';
+      await sendReturnConfirmation(bookId, userEmail);
       return json(200, { success: true });
     }
 
@@ -51,6 +67,9 @@ export async function handler(
       }
       throw err;
     }
+
+    const userEmail = (claims.email as string) ?? '';
+    await sendReturnConfirmation(bookId, userEmail);
 
     return json(200, { success: true });
   });

@@ -9,6 +9,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -16,6 +17,7 @@ export interface ApiStackProps extends cdk.StackProps {
   checkoutsTable: dynamodb.Table;
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
+  sesFromAddress: string;
 }
 
 const LAMBDA_DIR = path.join(__dirname, '..', 'lambda');
@@ -26,11 +28,12 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { catalogTable, checkoutsTable, userPool, userPoolClient } = props;
+    const { catalogTable, checkoutsTable, userPool, userPoolClient, sesFromAddress } = props;
 
     const commonEnv = {
       CATALOG_TABLE_NAME: catalogTable.tableName,
       CHECKOUTS_TABLE_NAME: checkoutsTable.tableName,
+      SES_FROM_ADDRESS: sesFromAddress,
     };
 
     const makeFunction = (name: string, entry: string) =>
@@ -66,6 +69,17 @@ export class ApiStack extends cdk.Stack {
     catalogTable.grantReadWriteData(updateItemFn);
     catalogTable.grantWriteData(deleteItemFn);
     checkoutsTable.grantWriteData(deleteItemFn);
+
+    // Checkout/return send confirmation emails; both also need read access
+    // to the Catalog table to look up the book's title.
+    catalogTable.grantReadData(checkoutBookFn);
+    catalogTable.grantReadData(returnBookFn);
+    const sesSendPolicy = new iam.PolicyStatement({
+      actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+      resources: ['*'],
+    });
+    checkoutBookFn.addToRolePolicy(sesSendPolicy);
+    returnBookFn.addToRolePolicy(sesSendPolicy);
 
     // Warm pool: ping every 5 minutes with a static payload the handler
     // recognizes and returns from immediately, before any auth check or

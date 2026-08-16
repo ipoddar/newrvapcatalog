@@ -465,3 +465,43 @@ since no historical checkout state existed to migrate from Supabase.
 6. ⬜ Decommission the Supabase project — **not yet done**. No evidence
    the Supabase project has been paused or deleted. Keep it running until
    the smoke test above passes, then decommission.
+
+### Bug found and fixed during this work: checkout/return used the wrong key
+`components/catalog/catalog.tsx` was passing the book's **display number**
+(`order.number`, e.g. `"1029"`) to the checkout/return handlers instead of
+its real `id` (ULID). Since `getCatalog.ts` matches checkout records by
+`id`, every checkout silently failed to register as "checked out" to
+other users, and nothing prevented a second user (or admin) from also
+checking out the same book. Fixed by switching all checkout/return
+call sites to `order.id`. Three pre-existing checkout records in the live
+`Checkouts` table (mis-keyed under `"1029"`, `"1341"`, `"321"`) were
+migrated to their correct `id` keys rather than deleted, preserving the
+affected user's active checkouts.
+
+### Email notifications (SES)
+Added transactional email via **Amazon SES**:
+- **Sender identity**: a single verified email address (see
+  `SES_FROM_ADDRESS`, passed as a CDK context/env var at deploy time —
+  not committed to the repo), not a verified domain. SES account is
+  still in **sandbox mode** pending AWS review of the production-access
+  request — until approved, mail can only be delivered to individually
+  SES-verified recipient addresses.
+- **Welcome email**: `infra/lambda/postConfirmation.ts`, wired as the
+  Cognito User Pool's `postConfirmation` Lambda trigger
+  (`infra/lib/cognito-stack.ts`). Fires once, only on
+  `PostConfirmation_ConfirmSignUp` (not on every login).
+- **Checkout confirmation**: `infra/lambda/checkoutBook.ts` now looks up
+  the book's title from the `Catalog` table after the checkout write
+  succeeds, then emails the checking-out user.
+- **Return confirmation**: `infra/lambda/returnBook.ts` looks up the
+  book's title and the checkout record's `userEmail` (for the admin
+  bypass path) or the caller's own JWT claim (self-service path) before
+  deleting the checkout record, then sends the confirmation.
+- **Shared helper**: `infra/lambda/lib/email.ts` wraps
+  `@aws-sdk/client-sesv2`'s `SendEmailCommand`. Failures are caught and
+  logged, never thrown — a signup/checkout/return must succeed even if
+  SES is down, throttled, or the recipient isn't sandbox-verified.
+- All three email-sending Lambdas (`PostConfirmationFn`,
+  `CheckoutBookFn`, `ReturnBookFn`) were granted `ses:SendEmail`/
+  `ses:SendRawEmail` IAM permissions scoped to `*` (SES has no
+  resource-level ARN for a verified identity to scope to more tightly).

@@ -13,7 +13,7 @@ import { ConfirmDeleteModal } from "../ui/confirm-delete-modal";
 import { EditItemModal, EditableItem } from "../ui/edit-item-modal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { useState, useEffect } from "react";
-import { PencilIcon, TrashIcon, ReturnIcon, BookIcon, InfoIcon } from "../icons";
+import { PencilIcon, TrashIcon, ReturnIcon, CheckoutIcon, InfoIcon } from "../icons";
 import { deleteProduct, updateProduct, checkoutBook, returnBook } from "../../app/(dashboard)/actions";
 
 interface Order {
@@ -195,8 +195,9 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
       formData.append('bookId', bookId);
       
       const result = await checkoutBook(formData);
-      
+
       if (result.success) {
+        alert('Book checked out! You can return it any time from this same row.');
         // Refresh the page to show updated data
         window.location.reload();
       } else {
@@ -268,16 +269,18 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
                 <div className="font-bold text-gray-900 text-lg">#{order.number}</div>
                 <div className="flex gap-2 items-center">
                   {order.checkedOutByCurrentUser ? (
-                    <div 
+                    <div
+                      title="Return this book"
                       className={`p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
-                        checkoutStates[order.number.toString()] ? 'opacity-50' : 'hover:bg-blue-500'
+                        checkoutStates[order.id] ? 'opacity-50' : 'hover:bg-blue-500'
                       }`}
-                      onClick={() => !checkoutStates[order.number.toString()] && handleReturn(order.number.toString())}
+                      onClick={() => !checkoutStates[order.id] && handleReturn(order.id)}
                     >
                       <ReturnIcon height={16} color="#6b7280"></ReturnIcon>
                     </div>
                   ) : order.isCheckedOut && order.checkoutDetails ? (
-                    <div 
+                    <div
+                      title="View checkout details"
                       className="p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer hover:bg-gray-100"
                       onClick={() => toggleCheckoutDetails(order.id)}
                       data-checkout-details
@@ -285,17 +288,18 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
                       <InfoIcon height={16} color="#6b7280" />
                     </div>
                   ) : order.isCheckedOut ? (
-                    <div className="hover:bg-red-500 p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer">
+                    <div title="Checked out" className="hover:bg-red-500 p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer">
                       <InfoIcon height={16} color="#6b7280" />
                     </div>
                   ) : (
-                    <div 
+                    <div
+                      title="Check out this book"
                       className={`p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
-                        checkoutStates[order.number.toString()] ? 'opacity-50' : 'hover:bg-green-500'
+                        checkoutStates[order.id] ? 'opacity-50' : 'hover:bg-green-500'
                       }`}
-                      onClick={() => !checkoutStates[order.number.toString()] && handleCheckout(order.number.toString())}
+                      onClick={() => !checkoutStates[order.id] && handleCheckout(order.id)}
                     >
-                      <BookIcon height={16} color="#6b7280"></BookIcon>
+                      <CheckoutIcon height={16} color="#6b7280"></CheckoutIcon>
                     </div>
                   )}
                   {isAdmin && (
@@ -516,14 +520,19 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
                       <div className="flex gap-1 items-center">
                         {order.checkedOutByCurrentUser ? (
                           <div className="space-y-1">
-                            <div 
-                              className={`p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
-                                checkoutStates[order.number.toString()] ? 'opacity-50' : 'hover:bg-blue-500'
-                              }`}
-                              onClick={() => !checkoutStates[order.number.toString()] && handleReturn(order.number.toString())}
-                            >
-                              <ReturnIcon height={14} color="#6b7280"></ReturnIcon>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className={`p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
+                                    checkoutStates[order.id] ? 'opacity-50' : 'hover:bg-blue-500'
+                                  }`}
+                                  onClick={() => !checkoutStates[order.id] && handleReturn(order.id)}
+                                >
+                                  <ReturnIcon height={14} color="#6b7280"></ReturnIcon>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>Return this book</TooltipContent>
+                            </Tooltip>
                           </div>
                         ) : order.isCheckedOut && order.checkoutDetails ? (
                           <div className="space-y-1 relative">
@@ -564,14 +573,19 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
                             <InfoIcon height={14} color="#6b7280" />
                           </div>
                         ) : (
-                          <div 
-                            className={`p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
-                              checkoutStates[order.number.toString()] ? 'opacity-50' : 'hover:bg-green-500'
-                            }`}
-                            onClick={() => !checkoutStates[order.number.toString()] && handleCheckout(order.number.toString())}
-                          >
-                            <BookIcon height={14} color="#6b7280"></BookIcon>
-                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={`p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
+                                  checkoutStates[order.id] ? 'opacity-50' : 'hover:bg-green-500'
+                                }`}
+                                onClick={() => !checkoutStates[order.id] && handleCheckout(order.id)}
+                              >
+                                <CheckoutIcon height={14} color="#6b7280"></CheckoutIcon>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>Check out this book</TooltipContent>
+                          </Tooltip>
                         )}
                         {isAdmin && (
                           <>
