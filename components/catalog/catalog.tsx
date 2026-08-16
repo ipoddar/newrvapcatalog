@@ -50,6 +50,8 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
   const [selectedItem, setSelectedItem] = useState<EditableItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditSlow, setIsEditSlow] = useState(false);
+  const [isDeleteSlow, setIsDeleteSlow] = useState(false);
   const [checkoutStates, setCheckoutStates] = useState<{ [key: string]: boolean }>({});
   const [showCheckoutDetails, setShowCheckoutDetails] = useState<{ [key: string]: boolean }>({});
 
@@ -101,6 +103,7 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
 
   const handleSaveEdit = async (item: EditableItem) => {
     setIsEditing(true);
+    setIsEditSlow(false);
     try {
       const formData = new FormData();
       formData.append('id', selectedOrderId || ''); // Use the stored ID
@@ -112,9 +115,9 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
       formData.append('lastname', item.last || '');
       // The editedtranslated form field maps to the 'editedtranslated' database column
       formData.append('editedtranslated', Array.isArray(item.editedtranslated) ? item.editedtranslated.join(', ') : (item.editedtranslated || ''));
-      
-      const result = await updateProduct(formData);
-      
+
+      const result = await updateProduct(formData, () => setIsEditSlow(true));
+
       if (result.success) {
         setEditModalOpen(false);
         setSelectedItem(null);
@@ -129,6 +132,7 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
       alert('An error occurred while updating the item');
     } finally {
       setIsEditing(false);
+      setIsEditSlow(false);
     }
   };
 
@@ -140,14 +144,15 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
 
   const handleConfirmDelete = async () => {
     if (!selectedOrderId) return;
-    
+
     setIsDeleting(true);
+    setIsDeleteSlow(false);
     try {
       const formData = new FormData();
       formData.append('id', selectedOrderId);
-      
-      const result = await deleteProduct(formData);
-      
+
+      const result = await deleteProduct(formData, () => setIsDeleteSlow(true));
+
       if (result.success) {
         // Close modal and reset state
         setDeleteModalOpen(false);
@@ -163,6 +168,7 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
       alert('An error occurred while deleting the item');
     } finally {
       setIsDeleting(false);
+      setIsDeleteSlow(false);
     }
   };
 
@@ -610,6 +616,7 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
         onSave={handleSaveEdit}
         item={selectedItem}
         isEditing={isEditing}
+        isSlow={isEditSlow}
       />
 
       <ConfirmDeleteModal
@@ -619,6 +626,7 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
         title="Delete Catalog Item"
         itemName={selectedOrderTitle || undefined}
         isDeleting={isDeleting}
+        isSlow={isDeleteSlow}
       />
     </div>
     </TooltipProvider>

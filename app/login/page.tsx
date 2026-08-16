@@ -10,7 +10,7 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { createClient } from '@/utils/supabase/client';
+import { signIn } from '@/utils/cognito/client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -28,45 +28,23 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Check environment variables first
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        setError('Supabase configuration is missing. Please check environment variables.');
-        return;
-      }
+      const session = await signIn(email, password);
+      const emailVerified = session.getIdToken().payload.email_verified;
 
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        // Check if it's an email not confirmed error
-        if (error.message.includes('Email not confirmed')) {
-          setError('Please check your email and click the verification link before signing in.');
-        } else {
-          setError(error.message);
-        }
-      } else if (data.user) {
-        // Check if email is verified
-        if (!data.user.email_confirmed_at) {
-          // User exists but email not verified - redirect to verify-email page
-          router.push('/verify-email');
-        } else {
-          // Successful login with verified email
-          router.push('/');
-          router.refresh();
-        }
+      if (emailVerified === true || emailVerified === 'true') {
+        router.push('/');
+        router.refresh();
       } else {
-        setError('Login failed - no user data returned');
+        router.push('/verify-email');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(`An unexpected error occurred: ${errorMessage}`);
+      if (err?.code === 'UserNotConfirmedException') {
+        setError('Please check your email and enter the verification code before signing in.');
+        router.push('/verify-email');
+      } else {
+        setError(err?.message || 'An unexpected error occurred');
+      }
     } finally {
       setIsLoading(false);
     }

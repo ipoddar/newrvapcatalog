@@ -1,103 +1,85 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Divide, File, PlusCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { createClient } from '../../utils/supabase/server';
-import Catalog from '../../components/catalog/catalog';
+'use client';
+
+import { useEffect, useState } from 'react';
 import ProductsPageClient from './products-page-client';
-import { getData } from '@/lib/db';
 import { checkUserAdmin } from '@/lib/auth-utils';
+import { apiUrl, authedRequestInit } from '@/utils/api-client';
 
-// Extract filter state function
-async function extractFilters(searchParams?: { [key: string]: string | string[] | undefined }) {
-  const filters = {
-    genres: [] as string[],
-    languages: [] as string[],
-    yearRange: null as { min: number; max: number } | null,
-    searchQueries: [] as Array<{ criteria: string; query: string }>,
-    titleSearch: '',
-    idSearch: '',
-    authorSearch: '',
-    page: 1,
-    pageSize: 100
-  };
-
-  if (!searchParams) return filters;
-
-  // Extract pagination parameters
-  const page = searchParams.page;
-  if (page && typeof page === 'string') {
-    const pageNum = parseInt(page);
-    if (!isNaN(pageNum) && pageNum > 0) {
-      filters.page = pageNum;
-    }
-  }
-
-  const pageSize = searchParams.pageSize;
-  if (pageSize && typeof pageSize === 'string') {
-    const pageSizeNum = parseInt(pageSize);
-    if (!isNaN(pageSizeNum) && pageSizeNum > 0) {
-      filters.pageSize = pageSizeNum;
-    }
-  }
-
-  // Extract tab selections (genres and languages)
-  const selectedTabs = searchParams.tabs;
-  const tabArray = Array.isArray(selectedTabs) ? selectedTabs : (selectedTabs ? [selectedTabs] : []);
-  
-  // If "All" is explicitly selected, set it in the arrays
-  if (tabArray.includes("All")) {
-    filters.genres = ["All"];
-    filters.languages = ["All"];
-  } else {
-    // Otherwise filter by specific codes
-    const genreCodes = ["CLB", "DDL", "DMW", "GIT", "HIS", "HMS", "KID", "MNP", "ODL", "OPH", "PIL", "SCI", "SER", "SHR", "SMH", "SNK", "SPD", "SRK", "VED", "VIV", "UVO"];
-    const languageCodes = ["E", "S", "H", "B", "T"];
-    
-    filters.genres = tabArray.filter(tab => genreCodes.includes(tab));
-    filters.languages = tabArray.filter(tab => languageCodes.includes(tab));
-  }
-
-  // Extract year range
-  const yearMin = searchParams.yearMin;
-  const yearMax = searchParams.yearMax;
-  if (yearMin && yearMax) {
-    filters.yearRange = {
-      min: parseInt(yearMin as string),
-      max: parseInt(yearMax as string)
-    };
-  }
-
-  // Extract search queries
-  const searchCriteria = searchParams.searchCriteria;
-  const searchQuery = searchParams.searchQuery;
-  if (searchCriteria && searchQuery) {
-    const criteriaArray = Array.isArray(searchCriteria) ? searchCriteria : [searchCriteria];
-    const queryArray = Array.isArray(searchQuery) ? searchQuery : [searchQuery];
-    
-    filters.searchQueries = criteriaArray.map((criteria, index) => ({
-      criteria,
-      query: queryArray[index] || ''
-    })).filter(sq => sq.query.trim());
-  }
-
-  // Extract individual search fields
-  filters.titleSearch = (searchParams.titleSearch as string) || '';
-  filters.idSearch = (searchParams.idSearch as string) || '';
-  filters.authorSearch = (searchParams.authorSearch as string) || '';
-
-  return filters;
+export interface CatalogItem {
+  id: string;
+  number: number;
+  title: string;
+  category: string;
+  language: string[];
+  pubyear: number | null;
+  firstname: string;
+  lastname: string;
+  editedTranslated: string[] | null;
+  isCheckedOut: boolean;
+  checkedOutByCurrentUser: boolean;
+  checkoutDetails: {
+    userDisplay: string;
+    userEmail: string;
+    userPhone: string;
+    checkedOutDate: string;
+  } | null;
 }
 
-export default async function ProductsPage({
-  searchParams
-}: {
-  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
-}) {
-  const resolvedSearchParams = await searchParams;
-  const filters = await extractFilters(resolvedSearchParams);
-  const catalog = await getData(filters);
-  const isAdmin = await checkUserAdmin();
+export default function ProductsPage() {
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  return <ProductsPageClient catalog={catalog || []} isAdmin={isAdmin} />;
+  useEffect(() => {
+    let isMounted = true;
+
+    async function load() {
+      try {
+        const [init, admin] = await Promise.all([
+          authedRequestInit(),
+          checkUserAdmin(),
+        ]);
+        const response = await fetch(apiUrl('/catalog'), init);
+        const body = await response.json();
+        if (!response.ok) {
+          throw new Error(body?.error ?? 'Failed to load catalog');
+        }
+        if (!isMounted) return;
+        setCatalog(body.data ?? []);
+        setIsAdmin(admin);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : 'Failed to load catalog');
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading catalog...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-24 text-red-600">
+        Failed to load catalog: {error}
+      </div>
+    );
+  }
+
+  return <ProductsPageClient catalog={catalog} isAdmin={isAdmin} />;
 }

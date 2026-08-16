@@ -13,6 +13,7 @@ interface EditItemModalProps {
   onSave: (item: EditableItem) => void;
   item: EditableItem | null;
   isEditing?: boolean;
+  isSlow?: boolean;
 }
 
 export interface EditableItem {
@@ -30,7 +31,8 @@ export function EditItemModal({
   onClose,
   onSave,
   item,
-  isEditing = false
+  isEditing = false,
+  isSlow = false
 }: EditItemModalProps) {
   const [formData, setFormData] = useState<EditableItem | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -433,7 +435,11 @@ export function EditItemModal({
             disabled={isEditing}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
           >
-            {isEditing ? "Saving..." : "Save Changes"}
+            {isEditing
+              ? isSlow
+                ? "Still working — server is starting up…"
+                : "Saving..."
+              : "Save Changes"}
           </Button>
         </div>
       </div>

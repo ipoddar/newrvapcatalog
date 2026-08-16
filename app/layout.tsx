@@ -1,7 +1,6 @@
 import './globals.css';
 import "@radix-ui/themes/styles.css";
 
-import { Analytics } from '@vercel/analytics/react';
 import { Theme } from "@radix-ui/themes";
 
 export const metadata = {
@@ -23,7 +22,6 @@ export default function RootLayout({
       </head>
       <body className="flex min-h-screen w-full flex-col">
         <Theme>{children}</Theme>
-        <Analytics />
       </body>
     </html>
   );

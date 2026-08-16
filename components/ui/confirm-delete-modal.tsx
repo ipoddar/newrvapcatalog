@@ -10,6 +10,7 @@ interface ConfirmDeleteModalProps {
   title: string;
   itemName?: string;
   isDeleting?: boolean;
+  isSlow?: boolean;
 }
 
 export function ConfirmDeleteModal({
@@ -18,7 +19,8 @@ export function ConfirmDeleteModal({
   onConfirm,
   title,
   itemName,
-  isDeleting = false
+  isDeleting = false,
+  isSlow = false
 }: ConfirmDeleteModalProps) {
   const handleClose = () => {
     if (!isDeleting) {
@@ -85,7 +87,11 @@ export function ConfirmDeleteModal({
             disabled={isDeleting}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white border-red-600"
           >
-            {isDeleting ? "Deleting..." : "Delete"}
+            {isDeleting
+              ? isSlow
+                ? "Still working — server is starting up…"
+                : "Deleting..."
+              : "Delete"}
           </Button>
         </div>
       </div>

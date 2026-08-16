@@ -1,4 +1,3 @@
-import { createClient } from '@/utils/supabase/server';
 import Catalog from '@/components/catalog/catalog';
 
 // Mock data to demonstrate checkout details display
@@ -73,7 +72,7 @@ const mockCatalogData = [
   }
 ];
 
-export default async function CheckoutDemoPage() {
+export default function CheckoutDemoPage() {
   return (
     <div className="p-6">
       <div className="mb-6">

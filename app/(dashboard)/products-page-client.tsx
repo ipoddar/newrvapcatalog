@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Fuse from "fuse.js";
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Catalog from '../../components/catalog/catalog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -9,13 +10,16 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { File, PlusCircle } from 'lucide-react';
 import { CreateItemModal } from "@/components/ui/create-item-modal";
+import type { CatalogItem } from "./page";
 
-export default function ProductsPageClient({ catalog, isAdmin }: { catalog: any; isAdmin: boolean }) {
+export default function ProductsPageClient({ catalog, isAdmin }: { catalog: CatalogItem[]; isAdmin: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   
   const [selectedTabs, setSelectedTabs] = useState<string[]>([""]);
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isCreateSlow, setIsCreateSlow] = useState(false);
   
   // Separate state for categories (genres) and languages
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -39,16 +43,114 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: any;
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize] = useState<number>(100); // Fixed page size of 100
 
-  // Extract catalog data and pagination info
-  const catalogData = catalog?.data || [];
-  const paginationInfo = catalog?.pagination || {
-    page: 1,
-    pageSize: 100,
-    total: 0,
-    totalPages: 1,
-    hasNext: false,
-    hasPrev: false
-  };
+  // The full catalog is fetched once (see page.tsx) and cached as a prop;
+  // filtering, fuzzy search, and pagination all run client-side here
+  // instead of round-tripping to the server per filter change.
+  const catalogData = catalog || [];
+
+  const genreCodes = ["CLB", "DDL", "DMW", "GIT", "HIS", "HMS", "KID", "MNP", "ODL", "OPH", "PIL", "SCI", "SER", "SHR", "SMH", "SNK", "SPD", "SRK", "VED", "VIV", "UVO"];
+  const languageCodes = ["E", "S", "H", "B", "T"];
+
+  const activeGenres = selectedTabs.includes("") ? [] : selectedTabs.filter((t) => genreCodes.includes(t));
+  const activeLanguages = selectedTabs.includes("") ? [] : selectedTabs.filter((t) => languageCodes.includes(t));
+
+  const titleFuse = useMemo(
+    () => new Fuse(catalogData, { keys: ["title"], threshold: 0.4 }),
+    [catalogData]
+  );
+  const idFuse = useMemo(
+    () => new Fuse(catalogData, { keys: ["id"], threshold: 0.4 }),
+    [catalogData]
+  );
+  const authorFuse = useMemo(
+    () => new Fuse(catalogData, { keys: ["firstname", "lastname"], threshold: 0.4 }),
+    [catalogData]
+  );
+  const generalFuse = useMemo(
+    () => new Fuse(catalogData, { keys: ["title", "id", "firstname", "lastname"], threshold: 0.4 }),
+    [catalogData]
+  );
+
+  const filteredCatalog = useMemo(() => {
+    let results: CatalogItem[] = catalogData;
+
+    if (activeGenres.length > 0) {
+      results = results.filter((item) => activeGenres.includes(item.category));
+    }
+    if (activeLanguages.length > 0) {
+      results = results.filter((item) =>
+        (Array.isArray(item.language) ? item.language : [item.language]).some((lang) =>
+          activeLanguages.includes(lang)
+        )
+      );
+    }
+    if (isYearFilterActive) {
+      results = results.filter(
+        (item) =>
+          item.pubyear != null && item.pubyear >= yearRange[0] && item.pubyear <= yearRange[1]
+      );
+    }
+
+    const idSet = (items: CatalogItem[]) => new Set(items.map((i) => i.id));
+
+    if (titleSearchQuery.trim()) {
+      const matchIds = idSet(titleFuse.search(titleSearchQuery.trim()).map((r) => r.item));
+      results = results.filter((item) => matchIds.has(item.id));
+    }
+    if (idSearchQuery.trim()) {
+      const matchIds = idSet(idFuse.search(idSearchQuery.trim()).map((r) => r.item));
+      results = results.filter((item) => matchIds.has(item.id));
+    }
+    if (authorSearchQuery.trim()) {
+      const matchIds = idSet(authorFuse.search(authorSearchQuery.trim()).map((r) => r.item));
+      results = results.filter((item) => matchIds.has(item.id));
+    }
+
+    if (isSearchFilterActive && activeSearchQueries.length > 0) {
+      for (const { criteria, query } of activeSearchQueries) {
+        if (!query.trim()) continue;
+        const fuse = criteria === "title" ? titleFuse : criteria === "id" ? idFuse : criteria === "author" ? authorFuse : generalFuse;
+        const matchIds = idSet(fuse.search(query.trim()).map((r) => r.item));
+        results = results.filter((item) => matchIds.has(item.id));
+      }
+    }
+
+    return results;
+  }, [
+    catalogData,
+    activeGenres,
+    activeLanguages,
+    isYearFilterActive,
+    yearRange,
+    titleSearchQuery,
+    idSearchQuery,
+    authorSearchQuery,
+    isSearchFilterActive,
+    activeSearchQueries,
+    titleFuse,
+    idFuse,
+    authorFuse,
+    generalFuse,
+  ]);
+
+  const paginationInfo = useMemo(() => {
+    const total = filteredCatalog.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(currentPage, totalPages);
+    return {
+      page,
+      pageSize,
+      total,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+    };
+  }, [filteredCatalog.length, pageSize, currentPage]);
+
+  const paginatedCatalog = useMemo(() => {
+    const start = (paginationInfo.page - 1) * pageSize;
+    return filteredCatalog.slice(start, start + pageSize);
+  }, [filteredCatalog, paginationInfo.page, pageSize]);
 
   const yearFilterId = `year-${yearRange[0]}-${yearRange[1]}`;
   const searchFilterIds = activeSearchQueries.map(sq => `search-${sq.criteria}-${sq.query}`);
@@ -509,9 +611,6 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: any;
     return () => clearTimeout(timeoutId);
   }, [updateURLParams]);
 
-  // Remove client-side filtering since data is now pre-filtered on server
-  const filteredCatalog = catalogData;
-
   // Pagination handlers
   const goToPage = useCallback((page: number) => {
     if (page >= 1 && page <= paginationInfo.totalPages && page !== currentPage) {
@@ -547,6 +646,8 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: any;
   }, [selectedTabs, isYearFilterActive, yearRange, isSearchFilterActive, activeSearchQueries, titleSearchQuery, idSearchQuery, authorSearchQuery]);
 
   const handleCreateItem = useCallback(async (newItem: any) => {
+    setIsCreating(true);
+    setIsCreateSlow(false);
     try {
       // Create FormData for the API call
       const formData = new FormData();
@@ -557,15 +658,15 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: any;
       formData.append('firstname', newItem.first || '');
       formData.append('lastname', newItem.last || '');
       formData.append('editedtranslated', Array.isArray(newItem.editedtranslated) ? newItem.editedtranslated.join(', ') : (newItem.editedtranslated || ''));
-      
+
       // Import the createProduct action
       const { createProduct } = await import('./actions');
-      const result = await createProduct(formData);
-      
+      const result = await createProduct(formData, () => setIsCreateSlow(true));
+
       if (result.success) {
         // Close the modal after successful creation
         setCreateModalOpen(false);
-        
+
         // Refresh the page to show updated data
         window.location.reload();
       } else {
@@ -574,6 +675,9 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: any;
     } catch (error) {
       console.error('Create error:', error);
       alert('An error occurred while creating the item');
+    } finally {
+      setIsCreating(false);
+      setIsCreateSlow(false);
     }
   }, []);
 
@@ -1075,13 +1179,15 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: any;
 
           {/* Content container with top padding to account for sticky header */}
           <div className="pt-4">
-              <Catalog data={filteredCatalog} isAdmin={isAdmin}></Catalog>
+              <Catalog data={paginatedCatalog} isAdmin={isAdmin}></Catalog>
           </div>
 
           <CreateItemModal
             isOpen={isCreateModalOpen}
             onClose={() => setCreateModalOpen(false)}
             onSave={handleCreateItem}
+            isCreating={isCreating}
+            isSlow={isCreateSlow}
           />
       </Tabs>
   );

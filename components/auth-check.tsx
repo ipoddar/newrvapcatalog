@@ -1,71 +1,84 @@
 'use client';
 
-import { createClient } from '@/utils/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { getSession } from '@/utils/cognito/client';
+
+const AUTH_PAGES = ['/login', '/signup', '/verify-email'];
 
 export default function AuthCheck({ children }: { children: React.ReactNode }) {
-    const [isLoading, setIsLoading] = useState(true);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAllowed, setIsAllowed] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
 
-    useEffect(() => {
-        const checkAuth = async () => {
-            try {
-                const supabase = createClient();
-                const { data: { user }, error } = await supabase.auth.getUser();
+  useEffect(() => {
+    let isMounted = true;
 
-                if (error || !user) {
-                    setIsAuthenticated(false);
-                    router.push('/login');
-                } else {
-                    setIsAuthenticated(true);
-                }
-            } catch (error) {
-                console.error('Auth check error:', error);
-                setIsAuthenticated(false);
-                router.push('/login');
-            } finally {
-                setIsLoading(false);
-            }
-        };
+    const checkAuth = async () => {
+      const isAuthPage = AUTH_PAGES.includes(pathname);
 
-        checkAuth();
+      try {
+        const session = await getSession();
+        const isAuthenticated = Boolean(session?.isValid());
+        const emailVerified =
+          session?.getIdToken().payload.email_verified === true ||
+          session?.getIdToken().payload.email_verified === 'true';
 
-        // Listen for auth changes
-        const supabase = createClient();
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_OUT' || !session) {
-                setIsAuthenticated(false);
-                router.push('/login');
-            } else if (event === 'SIGNED_IN' && session) {
-                setIsAuthenticated(true);
-            }
-        });
+        if (!isMounted) return;
 
-        return () => subscription.unsubscribe();
-    }, [router]);
+        if (!isAuthenticated && !isAuthPage) {
+          router.push('/login');
+          setIsAllowed(false);
+        } else if (isAuthenticated && !emailVerified && pathname !== '/verify-email') {
+          router.push('/verify-email');
+          setIsAllowed(false);
+        } else if (isAuthenticated && emailVerified && (pathname === '/login' || pathname === '/signup')) {
+          router.push('/');
+          setIsAllowed(false);
+        } else {
+          setIsAllowed(true);
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+        if (!isMounted) return;
+        if (!isAuthPage) {
+          router.push('/login');
+          setIsAllowed(false);
+        } else {
+          setIsAllowed(true);
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Checking authentication...</p>
-                </div>
-            </div>
-        );
-    }
+    checkAuth();
+    return () => {
+      isMounted = false;
+    };
+  }, [router, pathname]);
 
-    if (!isAuthenticated) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-center">
-                    <p className="text-gray-600">Redirecting to login...</p>
-                </div>
-            </div>
-        );
-    }
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
-    return <>{children}</>;
+  if (!isAllowed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <p className="text-gray-600">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }

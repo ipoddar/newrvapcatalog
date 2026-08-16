@@ -32,6 +32,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local secrets (e.g. Google service account keys for one-off scripts)
+/scripts/secrets/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

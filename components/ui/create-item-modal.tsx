@@ -11,6 +11,8 @@ interface CreateItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (item: CreateableItem) => void;
+  isCreating?: boolean;
+  isSlow?: boolean;
 }
 
 export interface CreateableItem {
@@ -26,7 +28,9 @@ export interface CreateableItem {
 export function CreateItemModal({
   isOpen,
   onClose,
-  onSave
+  onSave,
+  isCreating = false,
+  isSlow = false
 }: CreateItemModalProps) {
   const [formData, setFormData] = useState<CreateableItem>({
     title: '',
@@ -56,7 +60,9 @@ export function CreateItemModal({
   }, [isOpen]);
 
   const handleClose = () => {
-    onClose();
+    if (!isCreating) {
+      onClose();
+    }
   };
 
   const handleInputChange = (field: keyof CreateableItem, value: string | number) => {
@@ -433,6 +439,7 @@ export function CreateItemModal({
             type="button"
             variant="outline"
             onClick={handleClose}
+            disabled={isCreating}
             className="px-4 py-2"
           >
             Cancel
@@ -440,9 +447,14 @@ export function CreateItemModal({
           <Button
             type="button"
             onClick={handleSave}
+            disabled={isCreating}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
           >
-            Add Item
+            {isCreating
+              ? isSlow
+                ? "Still working — server is starting up…"
+                : "Adding..."
+              : "Add Item"}
           </Button>
         </div>
       </div>

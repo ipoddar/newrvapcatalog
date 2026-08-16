@@ -1,6 +1,6 @@
 'use client';
 
-import { createClient } from '@/utils/supabase/client';
+import { signOut } from '@/utils/cognito/client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -11,20 +11,17 @@ export default function SignOutButton() {
   const handleSignOut = async () => {
     setIsSigningOut(true);
     try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
+      signOut();
       router.push('/login');
       router.refresh();
-    } catch (error) {
-      console.error('Sign out error:', error);
     } finally {
       setIsSigningOut(false);
     }
   };
 
   return (
-    <button 
-      type="button" 
+    <button
+      type="button"
       onClick={handleSignOut}
       disabled={isSigningOut}
       className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50"

@@ -1,9 +1,65 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { BookOpen, Search, Users, Heart, Lightbulb, Globe, GraduationCap, Baby, ChartBarStacked } from 'lucide-react';
+import { apiUrl, authedRequestInit } from '@/utils/api-client';
+
+interface CatalogStats {
+  books: number;
+  languages: number;
+  categories: number;
+  authors: number;
+}
+
+function computeStats(catalog: any[]): CatalogStats {
+  const languages = new Set<string>();
+  const categories = new Set<string>();
+  const authors = new Set<string>();
+
+  for (const item of catalog) {
+    for (const lang of item.language ?? []) {
+      languages.add(lang);
+    }
+    if (item.category) categories.add(item.category);
+    const author = `${item.firstname ?? ''} ${item.lastname ?? ''}`.trim();
+    if (author) authors.add(author);
+  }
+
+  return {
+    books: catalog.length,
+    languages: languages.size,
+    categories: categories.size,
+    authors: authors.size,
+  };
+}
 
 export default function HomePage() {
+  const [stats, setStats] = useState<CatalogStats | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function load() {
+      try {
+        const init = await authedRequestInit();
+        const response = await fetch(apiUrl('/catalog'), init);
+        const body = await response.json();
+        if (!response.ok || !isMounted) return;
+        setStats(computeStats(body.data ?? []));
+      } catch {
+        // Leave stats null on failure — the cards fall back to a dash.
+      }
+    }
+
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const categories = [
     {
       group: "Core Teachings",
@@ -96,28 +152,28 @@ export default function HomePage() {
           <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
             <CardContent className="p-6 text-center">
               <BookOpen className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-blue-800">2000</div>
+              <div className="text-2xl font-bold text-blue-800">{stats?.books ?? '—'}</div>
               <div className="text-sm text-blue-600">Books Available</div>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
             <CardContent className="p-6 text-center">
               <Globe className="h-8 w-8 text-green-600 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-green-800">5</div>
+              <div className="text-2xl font-bold text-green-800">{stats?.languages ?? '—'}</div>
               <div className="text-sm text-green-600">Languages</div>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-purple-50 to-violet-50 border-purple-200">
             <CardContent className="p-6 text-center">
               <ChartBarStacked className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-purple-800">21</div>
+              <div className="text-2xl font-bold text-purple-800">{stats?.categories ?? '—'}</div>
               <div className="text-sm text-purple-600">Categories</div>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-orange-50 to-red-50 border-orange-200">
             <CardContent className="p-6 text-center">
               <Users className="h-8 w-8 text-orange-600 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-orange-800">100+</div>
+              <div className="text-2xl font-bold text-orange-800">{stats?.authors ?? '—'}</div>
               <div className="text-sm text-orange-600">Authors</div>
             </CardContent>
           </Card>
@@ -142,15 +198,16 @@ export default function HomePage() {
                 <CardContent className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {group.items.map((item) => (
-                      <div 
-                        key={item.code} 
-                        className={`p-4 rounded-lg border-2 ${item.color} hover:shadow-md transition-shadow`}
+                      <Link
+                        key={item.code}
+                        href={`/?tabs=${item.code}`}
+                        className={`block p-4 rounded-lg border-2 ${item.color} hover:shadow-md transition-shadow`}
                       >
                         <div className="flex items-center gap-3">
                           <span className="text-lg font-bold">{item.code}</span>
                           <span className="text-sm font-medium">{item.title}</span>
                         </div>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 </CardContent>

@@ -1,7 +1,8 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
-import { createClient } from '@/utils/supabase/server';
+import { getCurrentUser } from '@/lib/auth-utils';
 import { checkUserAdmin } from '@/lib/auth-utils';
-import Image from 'next/image';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,20 +11,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import SignOutButton from '@/components/sign-out-button';
 
-export async function User() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+interface CurrentUser {
+  email?: string;
+  phoneNumber?: string;
+}
 
-  if (!user) {
-    redirect('/login');
-  }
+export function User() {
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // Check if user is admin
-  const isAdmin = await checkUserAdmin();
+  useEffect(() => {
+    getCurrentUser().then((u) => setUser(u));
+    checkUserAdmin().then(setIsAdmin);
+  }, []);
+
+  if (!user) return null;
 
   return (
     <DropdownMenu>
@@ -33,20 +38,9 @@ export async function User() {
           size="icon"
           className={`overflow-hidden rounded-full relative ${isAdmin ? 'ring-2 ring-green-500' : ''}`}
         >
-          {user?.user_metadata?.avatar_url ? (
-            <Image
-              src={user.user_metadata.avatar_url}
-              width={36}
-              height={36}
-              alt="Avatar"
-              className="overflow-hidden rounded-full"
-            />
-          ) : (
-            <div className="w-9 h-9 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium">
-              {user.email?.charAt(0).toUpperCase() || 'U'}
-            </div>
-          )}
-          {/* Admin crown indicator */}
+          <div className="w-9 h-9 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium">
+            {user.email?.charAt(0).toUpperCase() || 'U'}
+          </div>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
@@ -56,12 +50,11 @@ export async function User() {
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
             </p>
-            {user.user_metadata?.phone_number && (
+            {user.phoneNumber && (
               <p className="text-xs leading-none text-muted-foreground">
-                {user.user_metadata.phone_number}
+                {user.phoneNumber}
               </p>
             )}
-            {/* Admin Status Badge */}
             <div className="flex items-center gap-1 mt-1">
               {isAdmin ? (
                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">

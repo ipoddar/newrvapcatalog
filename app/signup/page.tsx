@@ -10,7 +10,7 @@ import {
     CardTitle
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { createClient } from '@/utils/supabase/client';
+import { signUp } from '@/utils/cognito/client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -102,39 +102,18 @@ export default function SignUpPage() {
         setErrors({});
 
         try {
-            const supabase = createClient();
-
-            // Sign up the user with email confirmation enabled
-            const { data, error } = await supabase.auth.signUp({
+            await signUp({
                 email: formData.email,
                 password: formData.password,
-                options: {
-                    emailRedirectTo: `${window.location.origin}/verify-email`,
-                    data: {
-                        first_name: formData.firstName.trim(),
-                        last_name: formData.lastName.trim(),
-                        phone_number: formData.phoneNumber.trim(),
-                        full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`
-                    }
-                }
+                firstName: formData.firstName.trim(),
+                lastName: formData.lastName.trim(),
+                phoneNumber: formData.phoneNumber.trim() || undefined
             });
 
-            if (error) {
-                setErrors({ general: error.message });
-            } else if (data.user && !data.user.email_confirmed_at) {
-                // User created but needs email verification
-                router.push('/verify-email?message=check-email');
-            } else if (data.user && data.user.email_confirmed_at) {
-                // User already verified (shouldn't happen in normal flow)
-                router.push('/');
-                router.refresh();
-            } else {
-                setErrors({ general: 'Sign-up failed - no user data returned' });
-            }
-        } catch (err) {
+            router.push(`/verify-email?message=check-email&email=${encodeURIComponent(formData.email)}`);
+        } catch (err: any) {
             console.error('Sign-up error:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            setErrors({ general: `An unexpected error occurred: ${errorMessage}` });
+            setErrors({ general: err?.message || 'An unexpected error occurred' });
         } finally {
             setIsLoading(false);
         }

@@ -27,9 +27,9 @@ Decisions already made (do not re-litigate unless requirements change):
 - **Frontend**: keep the existing Next.js codebase, convert to a static
   export (`output: 'export'`), deploy to S3 + CloudFront. Do not rewrite as
   a separate Vite/React SPA.
-- **Google Sheet**: one-time seed import into DynamoDB. Not an ongoing sync
-  — after seeding, all catalog changes happen through the app's own admin
-  CRUD UI backed by DynamoDB.
+- **Google Sheet**: one-time seed import into DynamoDB. Not an ongoing
+  sync — after seeding, all catalog changes happen through the app's own
+  admin CRUD UI backed by DynamoDB.
 
 ---
 
@@ -65,7 +65,13 @@ No EC2, RDS, NAT Gateway, VPC, or OpenSearch/Algolia anywhere in this design.
   monthly cost, and its built-in JWT authorizer avoids paying for a Lambda
   authorizer invocation on every request.
 - **Lambda**: free tier (1M requests + 400,000 GB-s/month) comfortably
-  covers a small library-catalog app.
+  covers a small library-catalog app. `getCatalog`, `checkoutBook`, and
+  `returnBook` are kept warm via a low-frequency EventBridge ping (see
+  Phase 1) rather than Provisioned Concurrency — at one ping every 5
+  minutes per function that's ~26,000 extra invocations/month total,
+  well inside the free tier, so warming these three costs effectively
+  $0 instead of the ~$1.50–2/month per function Provisioned Concurrency
+  would add.
 - **DynamoDB on-demand**: no provisioned capacity to pay for idle; at
   ~2,000 catalog items and light traffic this is cents/month.
 - **No search service**: at ~2,000 rows, full-text/fuzzy search runs
@@ -164,6 +170,24 @@ language, easy to iterate, no separate Terraform toolchain to install.
      `middleware.ts` gate).
    - Grant each Lambda least-privilege DynamoDB IAM permissions
      (`grantReadData`/`grantReadWriteData` scoped per table per function).
+   - **Warm pool for the hot-path Lambdas** (`getCatalog`, `checkoutBook`,
+     `returnBook`): an EventBridge scheduled rule (`rate(5 minutes)`)
+     targets each of these three functions directly with a static JSON
+     payload `{ "warmerPing": true }`. Each handler checks for
+     `event.warmerPing` **first, before touching DynamoDB or running any
+     auth/admin check**, and returns immediately
+     (`{ statusCode: 200, body: "warm" }`) — critical for `checkoutBook`/
+     `returnBook` so a warming ping can never accidentally check out or
+     return a book. This keeps one execution environment per function
+     warm continuously; a burst of concurrent traffic can still cold-start
+     *additional* environments beyond the one kept warm, so this reduces
+     — but doesn't eliminate — cold starts under concurrency. No
+     Provisioned Concurrency is used (it bills hourly even at 1 unit,
+     conflicting with the plan's minimum-cost target); the EventBridge
+     ping costs effectively nothing at this traffic volume.
+   - `createItem`, `updateItem`, `deleteItem` (admin-only, low-frequency)
+     are **not** kept warm — see the cold-start loading message in
+     Phase 3 instead.
 5. **S3 + CloudFront** stack:
    - Private S3 bucket (block all public access), CloudFront distribution
      with Origin Access Control, default root object `index.html`, a
@@ -345,3 +369,104 @@ throwaway CDK custom-resource / manual `ts-node` invocation once).
   worry about matching.
 - Decide on a custom domain (adds Route 53 + ACM, still cheap but not
   strictly $0) vs. the default CloudFront domain.
+
+---
+
+## As Executed
+
+The migration above has been carried out. All four CDK stacks are
+deployed and live in AWS account `257967673968`, region `us-east-2`:
+
+| Stack | File | Status |
+|---|---|---|
+| `RvapCognitoStack` | `infra/lib/cognito-stack.ts` | CREATE_COMPLETE |
+| `RvapDataStack` | `infra/lib/data-stack.ts` | CREATE_COMPLETE |
+| `RvapApiStack` | `infra/lib/api-stack.ts` | UPDATE_COMPLETE |
+| `RvapSiteStack` | `infra/lib/site-stack.ts` | UPDATE_COMPLETE |
+
+Live endpoints/identifiers:
+- API Gateway: `https://qjr9kpgjwf.execute-api.us-east-2.amazonaws.com`
+- Cognito User Pool: `us-east-2_x6a0tWWWr`, App Client:
+  `4uu5m45v94s23l5au7kgl6nno7`
+- CloudFront: `d2mxn2yqt3hfbp.cloudfront.net` (distribution
+  `E2UJ79TINQJPL9`), S3 bucket
+  `rvapsitestack-sitebucket397a1860-azpcr2xevxzx`
+- DynamoDB: `RvapDataStack-CatalogTableF8EA09BD-*`,
+  `RvapDataStack-CheckoutsTableCD5CF2AD-*`
+
+### Deviations from the plan above
+- **Lambda runtime**: shipped as **Node.js 22.x**, not the planned 20.x
+  (22.x was current at deploy time).
+- **CloudFront routing gotcha not in the original plan**: `next export`
+  writes routes as `login.html` rather than `login/index.html`, so a bare
+  `/login` request would 404 through to the SPA fallback and silently
+  serve the wrong page. Fixed with a CloudFront Function
+  (`RewriteToHtmlFunction`, JS 2.0 runtime, added in
+  `infra/lib/site-stack.ts`) on `viewer-request` that appends
+  `index.html` to trailing-slash URIs and `.html` to extensionless ones
+  before the request reaches S3.
+- **Auth library**: went with `amazon-cognito-identity-js` directly
+  (the plan's "lighter weight" alternative), not Amplify.
+- **Cold-start UX was fully wired, not just described**: the warm-pool
+  design shipped as planned (EventBridge → `isWarmerPing()` short-circuit
+  in `infra/lambda/lib/warmer.ts`), plus an `X-Lambda-Warm` response
+  header (`infra/lambda/lib/http.ts`) that the frontend
+  (`utils/fetch-with-cold-start-hint.ts`, consumed by
+  `app/(dashboard)/actions.ts`'s `adminRequest()`) uses to show a
+  "still starting up" hint for the three unwarmed admin-mutation Lambdas
+  if a response takes over 400ms.
+- **Data model attributes shipped as plain arrays**, not DynamoDB string
+  sets (`SS`) as originally suggested for `language`/`editedTranslated` —
+  simpler to work with in JSON payloads, no functional difference at this
+  scale.
+- **`categorycount`/`categoryindex`/`titlecount`**: shipped exactly as
+  planned — computed at read time in `infra/lambda/getCatalog.ts` from
+  the full `Scan`, never stored.
+
+### Open items — resolved or still open
+- **Google Sheet column mapping**: resolved. `scripts/inspect-sheet.ts`
+  was run first against sheet
+  `1F-Jklguj9URpCFhsYbqhFPCL5epI4NPy0wA53zWZU1w` (tab `ALL`) to confirm
+  headers and which trailing columns actually held data, before
+  `scripts/migrate-from-sheet.ts` was written against the confirmed
+  layout.
+- **`rev` field**: resolved by omission, not by explicit confirmation
+  with the librarian/admin as the plan suggested — no `rev` field appears
+  anywhere in the shipped data model or migration script, so it was
+  dropped silently. `editedTranslated` *was* carried over (split on
+  `,`/`/` into a string array).
+- **`supabase.auth.admin.listUsers()` pre-existing bug**: moot — the new
+  architecture denormalizes checkout attribution into the `Checkouts`
+  item at write time (see `infra/lambda/checkoutBook.ts`), so no
+  Lambda ever needs an equivalent admin lookup call.
+- **Custom domain**: still not configured. Using CloudFront's default
+  `*.cloudfront.net` domain (`d2mxn2yqt3hfbp.cloudfront.net`), which is
+  free. Remains optional future work.
+
+### Data migration — actual result
+`scripts/migrate-from-sheet.ts` was run against the live `Catalog` table:
+**1,740 catalog items** written, plus the `COUNTER#catalog` counter item
+seeded to `1740`. Verified via a live `Scan` count of 1,741 total items
+(1,740 rows + 1 counter). The `Checkouts` table has **0 items** — expected,
+since no historical checkout state existed to migrate from Supabase.
+
+### Cutover — actual status
+1. ✅ `cdk deploy --all` — all four stacks live (see table above).
+2. ✅ Migration script run — 1,740 catalog rows written.
+3. ✅ Admin bootstrap — **two** Cognito users currently carry
+   `custom:admin = "true"` (`ipoddar@hotmail.com`,
+   `vivanneil@outlook.com`), not the single admin the plan described.
+   Confirm this is the intended admin list.
+4. ✅ Static export built and synced to S3
+   (`rvapsitestack-sitebucket397a1860-azpcr2xevxzx`); CloudFront
+   distribution `E2UJ79TINQJPL9` shows one completed invalidation
+   (2026-08-15T21:22:31Z).
+5. ⬜ Smoke test — not yet confirmed done in this session. Run the full
+   checklist (sign up, verify email, log in, browse/search/filter, check
+   out as one user, confirm a second user sees it unavailable, admin
+   create/edit/delete, sign out) against
+   `https://d2mxn2yqt3hfbp.cloudfront.net` before treating the migration
+   as fully validated.
+6. ⬜ Decommission the Supabase project — **not yet done**. No evidence
+   the Supabase project has been paused or deleted. Keep it running until
+   the smoke test above passes, then decommission.
