@@ -375,7 +375,7 @@ throwaway CDK custom-resource / manual `ts-node` invocation once).
 ## As Executed
 
 The migration above has been carried out. All four CDK stacks are
-deployed and live in AWS account `257967673968`, region `us-east-2`:
+deployed and live in the target AWS account, region `us-east-2`:
 
 | Stack | File | Status |
 |---|---|---|
@@ -384,15 +384,14 @@ deployed and live in AWS account `257967673968`, region `us-east-2`:
 | `RvapApiStack` | `infra/lib/api-stack.ts` | UPDATE_COMPLETE |
 | `RvapSiteStack` | `infra/lib/site-stack.ts` | UPDATE_COMPLETE |
 
-Live endpoints/identifiers:
-- API Gateway: `https://qjr9kpgjwf.execute-api.us-east-2.amazonaws.com`
-- Cognito User Pool: `us-east-2_x6a0tWWWr`, App Client:
-  `4uu5m45v94s23l5au7kgl6nno7`
-- CloudFront: `d2mxn2yqt3hfbp.cloudfront.net` (distribution
-  `E2UJ79TINQJPL9`), S3 bucket
-  `rvapsitestack-sitebucket397a1860-azpcr2xevxzx`
-- DynamoDB: `RvapDataStack-CatalogTableF8EA09BD-*`,
-  `RvapDataStack-CheckoutsTableCD5CF2AD-*`
+Live endpoints/identifiers (redacted here — see CDK stack outputs or
+`.env.production.local` for actual values):
+- API Gateway: `<ApiStack ApiUrl output>`
+- Cognito User Pool / App Client: `<CognitoStack CognitoUserPoolId /
+  CognitoUserPoolClientId outputs>`
+- CloudFront / S3: `<SiteStack DistributionDomainName / BucketName
+  outputs>`
+- DynamoDB: `RvapDataStack-CatalogTable*`, `RvapDataStack-CheckoutsTable*`
 
 ### Deviations from the plan above
 - **Lambda runtime**: shipped as **Node.js 22.x**, not the planned 20.x
@@ -425,9 +424,9 @@ Live endpoints/identifiers:
 
 ### Open items — resolved or still open
 - **Google Sheet column mapping**: resolved. `scripts/inspect-sheet.ts`
-  was run first against sheet
-  `1F-Jklguj9URpCFhsYbqhFPCL5epI4NPy0wA53zWZU1w` (tab `ALL`) to confirm
-  headers and which trailing columns actually held data, before
+  was run first against the source sheet (see `SHEET_ID` in
+  `scripts/migrate-from-sheet.ts`), tab `ALL`, to confirm headers and
+  which trailing columns actually held data, before
   `scripts/migrate-from-sheet.ts` was written against the confirmed
   layout.
 - **`rev` field**: resolved by omission, not by explicit confirmation
@@ -440,8 +439,7 @@ Live endpoints/identifiers:
   item at write time (see `infra/lambda/checkoutBook.ts`), so no
   Lambda ever needs an equivalent admin lookup call.
 - **Custom domain**: still not configured. Using CloudFront's default
-  `*.cloudfront.net` domain (`d2mxn2yqt3hfbp.cloudfront.net`), which is
-  free. Remains optional future work.
+  `*.cloudfront.net` domain, which is free. Remains optional future work.
 
 ### Data migration — actual result
 `scripts/migrate-from-sheet.ts` was run against the live `Catalog` table:
@@ -454,19 +452,16 @@ since no historical checkout state existed to migrate from Supabase.
 1. ✅ `cdk deploy --all` — all four stacks live (see table above).
 2. ✅ Migration script run — 1,740 catalog rows written.
 3. ✅ Admin bootstrap — **two** Cognito users currently carry
-   `custom:admin = "true"` (`ipoddar@hotmail.com`,
-   `vivanneil@outlook.com`), not the single admin the plan described.
-   Confirm this is the intended admin list.
-4. ✅ Static export built and synced to S3
-   (`rvapsitestack-sitebucket397a1860-azpcr2xevxzx`); CloudFront
-   distribution `E2UJ79TINQJPL9` shows one completed invalidation
-   (2026-08-15T21:22:31Z).
+   `custom:admin = "true"`, not the single admin the plan described.
+   Confirm this is the intended admin list (see Cognito console for
+   current admins).
+4. ✅ Static export built and synced to S3; CloudFront shows one
+   completed invalidation (2026-08-15T21:22:31Z).
 5. ⬜ Smoke test — not yet confirmed done in this session. Run the full
    checklist (sign up, verify email, log in, browse/search/filter, check
    out as one user, confirm a second user sees it unavailable, admin
-   create/edit/delete, sign out) against
-   `https://d2mxn2yqt3hfbp.cloudfront.net` before treating the migration
-   as fully validated.
+   create/edit/delete, sign out) against the live CloudFront domain
+   before treating the migration as fully validated.
 6. ⬜ Decommission the Supabase project — **not yet done**. No evidence
    the Supabase project has been paused or deleted. Keep it running until
    the smoke test above passes, then decommission.
