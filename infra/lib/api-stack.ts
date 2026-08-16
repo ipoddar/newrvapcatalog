@@ -34,6 +34,7 @@ export class ApiStack extends cdk.Stack {
       CATALOG_TABLE_NAME: catalogTable.tableName,
       CHECKOUTS_TABLE_NAME: checkoutsTable.tableName,
       SES_FROM_ADDRESS: sesFromAddress,
+      USER_POOL_ID: userPool.userPoolId,
     };
 
     const makeFunction = (name: string, entry: string) =>
@@ -58,6 +59,14 @@ export class ApiStack extends cdk.Stack {
     const createItemFn = makeFunction('CreateItemFn', 'createItem.ts');
     const updateItemFn = makeFunction('UpdateItemFn', 'updateItem.ts');
     const deleteItemFn = makeFunction('DeleteItemFn', 'deleteItem.ts');
+    const getUsersFn = makeFunction('GetUsersFn', 'getUsers.ts');
+    const adminCreateUserFn = makeFunction('AdminCreateUserFn', 'adminCreateUser.ts');
+
+    // Not API-routed — invoked only by the daily EventBridge schedule below.
+    const sendOverdueRemindersFn = makeFunction(
+      'SendOverdueRemindersFn',
+      'sendOverdueReminders.ts'
+    );
 
     catalogTable.grantReadData(getCatalogFn);
     checkoutsTable.grantReadData(getCatalogFn);
@@ -80,6 +89,44 @@ export class ApiStack extends cdk.Stack {
     });
     checkoutBookFn.addToRolePolicy(sesSendPolicy);
     returnBookFn.addToRolePolicy(sesSendPolicy);
+
+    // Admin user directory: reads all Cognito users plus every checkout,
+    // joined against the Catalog table for book titles.
+    checkoutsTable.grantReadData(getUsersFn);
+    catalogTable.grantReadData(getUsersFn);
+    const listUsersPolicy = new iam.PolicyStatement({
+      actions: ['cognito-idp:ListUsers'],
+      resources: [userPool.userPoolArn],
+    });
+    getUsersFn.addToRolePolicy(listUsersPolicy);
+
+    // Checkout-on-behalf-of: resolves the target user's sub to their
+    // email/name/phone via a ListUsers filter (see checkoutBook.ts).
+    checkoutBookFn.addToRolePolicy(listUsersPolicy);
+
+    // Admin user creation: provisions a Cognito user directly with a
+    // permanent password (no self-service verification step) and emails
+    // the new user their welcome message.
+    adminCreateUserFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cognito-idp:AdminCreateUser', 'cognito-idp:AdminSetUserPassword'],
+        resources: [userPool.userPoolArn],
+      })
+    );
+    adminCreateUserFn.addToRolePolicy(sesSendPolicy);
+
+    // Overdue reminders: reads/writes Checkouts (to stamp lastReminderSentAt),
+    // reads Catalog for titles, and sends via SES.
+    checkoutsTable.grantReadWriteData(sendOverdueRemindersFn);
+    catalogTable.grantReadData(sendOverdueRemindersFn);
+    sendOverdueRemindersFn.addToRolePolicy(sesSendPolicy);
+
+    // Check once a day for checkouts crossing the 3-month-since-checkout or
+    // 6-month-since-last-reminder threshold (see sendOverdueReminders.ts).
+    new events.Rule(this, 'OverdueRemindersScheduleRule', {
+      schedule: events.Schedule.rate(cdk.Duration.days(1)),
+      targets: [new targets.LambdaFunction(sendOverdueRemindersFn)],
+    });
 
     // Warm pool: ping every 5 minutes with a static payload the handler
     // recognizes and returns from immediately, before any auth check or
@@ -145,6 +192,8 @@ export class ApiStack extends cdk.Stack {
       [apigatewayv2.HttpMethod.POST],
       returnBookFn
     );
+    authorizedRoute('/admin/users', [apigatewayv2.HttpMethod.GET], getUsersFn);
+    authorizedRoute('/admin/users', [apigatewayv2.HttpMethod.POST], adminCreateUserFn);
 
     this.apiUrl = httpApi.apiEndpoint;
     new cdk.CfnOutput(this, 'ApiUrl', { value: httpApi.apiEndpoint });

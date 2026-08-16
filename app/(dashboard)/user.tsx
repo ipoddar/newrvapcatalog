@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import SignOutButton from '@/components/sign-out-button';
 
 interface CurrentUser {
@@ -69,6 +70,11 @@ export function User() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {isAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin/users">Manage Users</Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <SignOutButton />
         </DropdownMenuItem>
