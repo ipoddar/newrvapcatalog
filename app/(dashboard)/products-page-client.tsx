@@ -10,7 +10,45 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { File, PlusCircle } from 'lucide-react';
 import { CreateItemModal } from "@/components/ui/create-item-modal";
+import { MultiSelectDropdown, MultiSelectOption } from "@/components/ui/multi-select-dropdown";
 import type { CatalogItem } from "./page";
+
+// Code + full name, in the same order as the desktop tab row below — used
+// by the mobile Category/Language dropdowns (see MultiSelectDropdown).
+const CATEGORY_OPTIONS: MultiSelectOption[] = [
+  { code: "CLB", name: "Class books" },
+  { code: "DDL", name: "Lives of Direct Disciples of Sri Ramakrishna" },
+  { code: "DMW", name: "Divine mother worship" },
+  { code: "GIT", name: "Gita" },
+  { code: "HIS", name: "History" },
+  { code: "HMS", name: "Holy Mother, Life and Teachings" },
+  { code: "KID", name: "Children" },
+  { code: "MNP", name: "Mythology & Puranas" },
+  { code: "ODL", name: "Lives of Other Disciples" },
+  { code: "OPH", name: "Other Philosophies" },
+  { code: "PIL", name: "Pilgrimage & Tourism" },
+  { code: "SCI", name: "Science" },
+  { code: "SER", name: "Service to humanity" },
+  { code: "SHR", name: "Subset of Hindu religion" },
+  { code: "SMH", name: "Songs, Mantra, Shlokas, Prayers & Hymns" },
+  { code: "SNK", name: "Sankara" },
+  { code: "SPD", name: "Spiritual Practice & Discipline" },
+  { code: "SRK", name: "Sri Ramakrishna, Life & Teachings" },
+  { code: "VED", name: "Vedanta Philosophy" },
+  { code: "VIV", name: "Swami Vivekananda, Life & Teachings" },
+  { code: "UVO", name: "Upanishads, Vedas, Sutras etc." },
+];
+
+const LANGUAGE_OPTIONS: MultiSelectOption[] = [
+  { code: "E", name: "English" },
+  { code: "S", name: "Sanskrit" },
+  { code: "H", name: "Hindi" },
+  { code: "B", name: "Bengali" },
+  { code: "T", name: "Tamil" },
+];
+
+const CATEGORY_CODES = CATEGORY_OPTIONS.map((o) => o.code);
+const LANGUAGE_CODES = LANGUAGE_OPTIONS.map((o) => o.code);
 
 export default function ProductsPageClient({ catalog, isAdmin }: { catalog: CatalogItem[]; isAdmin: boolean }) {
   const router = useRouter();
@@ -258,6 +296,28 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
     console.log('Final selected tabs:', filteredValues);
     setSelectedTabs(filteredValues);
   }, [selectedTabs, isYearFilterActive, isSearchFilterActive]);
+
+  // Used by the mobile Category/Language dropdowns (MultiSelectDropdown),
+  // which report their full next-selection rather than a single toggled
+  // value — replace just that group's codes within selectedTabs, leaving
+  // the other group and any special tabs (year/search) untouched.
+  const replaceTabGroup = useCallback((groupCodes: string[], nextCodes: string[]) => {
+    setSelectedTabs((prev) => {
+      const kept = prev.filter((t) => t !== "" && !groupCodes.includes(t));
+      const next = [...kept, ...nextCodes];
+      return next.length > 0 ? next : [""];
+    });
+  }, []);
+
+  const handleCategorySelectionChange = useCallback(
+    (codes: string[]) => replaceTabGroup(CATEGORY_CODES, codes),
+    [replaceTabGroup]
+  );
+
+  const handleLanguageSelectionChange = useCallback(
+    (codes: string[]) => replaceTabGroup(LANGUAGE_CODES, codes),
+    [replaceTabGroup]
+  );
 
   const handleYearRangeChange = useCallback((values: number[]) => {
     setTempYearRange(values);
@@ -974,63 +1034,25 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
 
           {/* Category and Language Tabs - Responsive layout */}
           <div className='mb-1 md:mb-2'>
-            {/* Mobile: Multi-row layout to prevent overflow */}
-            <div className="md:hidden space-y-1">
-              {/* Mobile Row 1: First set of categories */}
-              <div className="w-full overflow-hidden px-1">
-                <div className="flex items-center gap-1">
-                  <div className="overflow-x-auto scrollbar-hide flex-1">
-                    <TabsList className="flex min-w-full w-max overflow-visible scrollbar-hide min-h-[20px] p-0">
-                      <TabsTrigger value="CLB" title="Class books" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">CLB</TabsTrigger>
-                      <TabsTrigger value="DDL" title="Lives of Direct Disciples of Sri Ramakrishna" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">DDL</TabsTrigger>
-                      <TabsTrigger value="DMW" title="Divine mother worship" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">DMW</TabsTrigger>
-                      <TabsTrigger value="GIT" title="Gita" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">GIT</TabsTrigger>
-                      <TabsTrigger value="HIS" title="History" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">HIS</TabsTrigger>
-                      <TabsTrigger value="HMS" title="Holy Mother, Life and Teachings" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">HMS</TabsTrigger>
-                      <TabsTrigger value="KID" title="Children" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">KID</TabsTrigger>
-                      <TabsTrigger value="MNP" title="Mythology & Puranas" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">MNP</TabsTrigger>
-                      <TabsTrigger value="ODL" title="Lives of Other Disciples" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">ODL</TabsTrigger>
-                      <TabsTrigger value="OPH" title="Other Philosophies" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">OPH</TabsTrigger>
-                      <TabsTrigger value="PIL" title="Pilgrimage & Tourism" className="flex-shrink-0 text-[9px] px-0.5 min-w-[24px]">PIL</TabsTrigger>
-                    </TabsList>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Mobile Row 2: Second set of categories */}
-              <div className="w-full overflow-hidden px-1">
-                <div className="flex items-center gap-1">
-                    <div className="overflow-x-auto scrollbar-hide flex-1">
-                      <TabsList className="flex min-w-full w-max overflow-visible scrollbar-hide min-h-[20px] p-0">
-                        <TabsTrigger value="SCI" title="Science" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">SCI</TabsTrigger>
-                        <TabsTrigger value="SER" title="Service to humanity" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">SER</TabsTrigger>
-                        <TabsTrigger value="SHR" title="Subset of Hindu religion" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">SHR</TabsTrigger>
-                        <TabsTrigger value="SMH" title="Songs, Mantra, Shlokas, Prayers & Hymns" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">SMH</TabsTrigger>
-                        <TabsTrigger value="SNK" title="Sankara" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">SNK</TabsTrigger>
-                        <TabsTrigger value="SPD" title="Spiritual Practice & Discipline" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">SPD</TabsTrigger>
-                        <TabsTrigger value="SRK" title="Sri Ramakrishna, Life & Teachings" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">SRK</TabsTrigger>
-                        <TabsTrigger value="VED" title="Vedanta Philosophy" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">VED</TabsTrigger>
-                        <TabsTrigger value="VIV" title="Swami Vivekananda, Life & Teachings" className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">VIV</TabsTrigger>
-                        <TabsTrigger value="UVO" title="Upanishads, Vedas, Sutras etc." className="flex-shrink-0 min-w-[24px] text-[9px] px-0.5">UVO</TabsTrigger>
-                      </TabsList>
-                    </div>
-                </div>
-              </div>
-              
-              {/* Mobile Row 3: Languages */}
-              <div className="w-full overflow-hidden px-1">
-                <div className="flex items-center gap-1">
-                  <div className="overflow-x-auto scrollbar-hide flex-1">
-                    <TabsList className="flex min-w-full w-max overflow-visible scrollbar-hide min-h-[20px] p-0">
-                      <TabsTrigger value="E" title="English" className="flex-shrink-0 text-[9px] px-1 min-w-[28px]">EN</TabsTrigger>
-                      <TabsTrigger value="S" title="Sanskrit" className="flex-shrink-0 text-[9px] px-1 min-w-[28px]">SA</TabsTrigger>
-                      <TabsTrigger value="H" title="Hindi" className="flex-shrink-0 text-[9px] px-1 min-w-[28px]">HI</TabsTrigger>
-                      <TabsTrigger value="B" title="Bengali" className="flex-shrink-0 text-[9px] px-1 min-w-[28px]">BN</TabsTrigger>
-                      <TabsTrigger value="T" title="Tamil" className="flex-shrink-0 text-[9px] px-1 min-w-[28px]">TA</TabsTrigger>
-                    </TabsList>
-                  </div>
-                </div>
-              </div>
+            {/* Mobile: two dropdowns (Category, Language) instead of the
+                horizontally-scrolling tab rows below — see MultiSelectDropdown.
+                Keeps this row a single fixed height regardless of how many
+                categories/languages exist. */}
+            <div className="md:hidden flex gap-2 px-1">
+              <MultiSelectDropdown
+                label="Category"
+                options={CATEGORY_OPTIONS}
+                selected={activeGenres}
+                onChange={handleCategorySelectionChange}
+                className="flex-1"
+              />
+              <MultiSelectDropdown
+                label="Language"
+                options={LANGUAGE_OPTIONS}
+                selected={activeLanguages}
+                onChange={handleLanguageSelectionChange}
+                className="flex-1"
+              />
             </div>
 
             {/* Desktop: Single row layout with horizontal scrolling */}
