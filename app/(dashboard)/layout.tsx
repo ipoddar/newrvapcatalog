@@ -1,10 +1,8 @@
 import Link from 'next/link';
 import {
-  Home,
   LineChart,
   Package,
   Package2,
-  PanelLeft,
   Settings,
   ShoppingCart,
   SquareLibrary,
@@ -19,8 +17,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator
 } from '@/components/ui/breadcrumb';
-import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import {
   Tooltip,
   TooltipContent,
@@ -30,6 +26,7 @@ import { User } from './user';
 import { VercelLogo } from '@/components/icons';
 import Providers from './providers';
 import { NavItem } from './nav-item';
+import { MobileNavItem } from './mobile-nav-item';
 import { SearchInput } from './search';
 import AuthCheck from '@/components/auth-check';
 
@@ -101,38 +98,21 @@ export function DesktopNav() {
 
 export function MobileNav() {
   return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button size="icon" variant="outline" className="border-[#e5e7eb] sm:hidden">
-          <PanelLeft className="h-5 w-5" />
-          <span className="sr-only">Toggle Menu</span>
-        </Button>
-      </SheetTrigger>
-      <SheetContent side="left" className="sm:max-w-xs">
-        <nav className="grid gap-6 text-lg font-medium">
-          <User
-            // href="#"
-            // className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
-          >
-            
-          </User>
-          <Link
-            href="/home"
-            className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-          >
-            <Home className="h-5 w-5" />
-            Home
-          </Link>
-          <Link
-            href="/"
-            className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-          >
-            <Home className="h-5 w-5" />
-            Catalog
-          </Link>
-        </nav>
-      </SheetContent>
-    </Sheet>
+    <nav className="flex items-center gap-2 sm:hidden">
+      <Link
+        href="/home"
+        className="bg-white group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground"
+      >
+        <img src='/logo.svg' alt="RVAP" />
+        <span className="sr-only">Home</span>
+      </Link>
+
+      <MobileNavItem href="/" label="Catalog">
+        <SquareLibrary className="h-5 w-5" />
+      </MobileNavItem>
+
+      <User />
+    </nav>
   );
 }
 
