@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  BookMarked,
   LineChart,
   Package,
   Package2,
@@ -76,6 +77,10 @@ export function DesktopNav() {
           <SquareLibrary className="h-5 w-5" />
         </NavItem>
 
+        <NavItem href="/my-checkouts" label="My Checkouts">
+          <BookMarked className="h-5 w-5" />
+        </NavItem>
+
         <User />
       </nav>
       <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
@@ -109,6 +114,10 @@ export function MobileNav() {
 
       <MobileNavItem href="/" label="Catalog">
         <SquareLibrary className="h-5 w-5" />
+      </MobileNavItem>
+
+      <MobileNavItem href="/my-checkouts" label="My Checkouts">
+        <BookMarked className="h-5 w-5" />
       </MobileNavItem>
 
       <User />
