@@ -7,6 +7,7 @@ import { apiUrl, authedRequestInit } from '@/utils/api-client';
 
 export interface CatalogItem {
   id: string;
+  sheetId: string | null;
   number: number;
   title: string;
   category: string;
@@ -15,6 +16,9 @@ export interface CatalogItem {
   firstname: string;
   lastname: string;
   editedTranslated: string[] | null;
+  titlecount: number;
+  categorycount: number;
+  categoryindex: number;
   isCheckedOut: boolean;
   checkedOutByCurrentUser: boolean;
   checkoutDetails: {
@@ -22,6 +26,7 @@ export interface CatalogItem {
     userEmail: string;
     userPhone: string;
     checkedOutDate: string;
+    checkedOutAtIso: string;
   } | null;
 }
 

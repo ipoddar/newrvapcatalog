@@ -102,6 +102,7 @@ export async function handler(
               userEmail: checkout.userEmail,
               userPhone: checkout.userPhone,
               checkedOutDate: new Date(checkout.checkedOutAt).toLocaleDateString(),
+              checkedOutAtIso: checkout.checkedOutAt,
             }
           : null,
       };

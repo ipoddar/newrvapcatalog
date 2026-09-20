@@ -12,6 +12,12 @@ import { File, PlusCircle } from 'lucide-react';
 import { CreateItemModal } from "@/components/ui/create-item-modal";
 import { MultiSelectDropdown, MultiSelectOption } from "@/components/ui/multi-select-dropdown";
 import type { CatalogItem } from "./page";
+import {
+  type SortColumn,
+  SORT_COLUMNS,
+  getSortValue,
+  compareSortValues,
+} from "@/lib/catalog-sort";
 
 // Code + full name, in the same order as the desktop tab row below — used
 // by the mobile Category/Language dropdowns (see MultiSelectDropdown).
@@ -58,7 +64,21 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreateSlow, setIsCreateSlow] = useState(false);
-  
+
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>("number");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const handleSort = useCallback((column: SortColumn) => {
+    setSortColumn((prevColumn) => {
+      if (prevColumn === column) {
+        setSortDirection((prevDirection) => (prevDirection === "asc" ? "desc" : "asc"));
+        return column;
+      }
+      setSortDirection("asc");
+      return column;
+    });
+  }, []);
+
   // Separate state for categories (genres) and languages
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
@@ -171,8 +191,15 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
     generalFuse,
   ]);
 
+  const sortedCatalog = useMemo(() => {
+    if (!sortColumn) return filteredCatalog;
+    return [...filteredCatalog].sort((a, b) =>
+      compareSortValues(getSortValue(a, sortColumn), getSortValue(b, sortColumn), sortDirection)
+    );
+  }, [filteredCatalog, sortColumn, sortDirection]);
+
   const paginationInfo = useMemo(() => {
-    const total = filteredCatalog.length;
+    const total = sortedCatalog.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(currentPage, totalPages);
     return {
@@ -183,12 +210,12 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
       hasNext: page < totalPages,
       hasPrev: page > 1,
     };
-  }, [filteredCatalog.length, pageSize, currentPage]);
+  }, [sortedCatalog.length, pageSize, currentPage]);
 
   const paginatedCatalog = useMemo(() => {
     const start = (paginationInfo.page - 1) * pageSize;
-    return filteredCatalog.slice(start, start + pageSize);
-  }, [filteredCatalog, paginationInfo.page, pageSize]);
+    return sortedCatalog.slice(start, start + pageSize);
+  }, [sortedCatalog, paginationInfo.page, pageSize]);
 
   const yearFilterId = `year-${yearRange[0]}-${yearRange[1]}`;
   const searchFilterIds = activeSearchQueries.map(sq => `search-${sq.criteria}-${sq.query}`);
@@ -1200,8 +1227,14 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
           </div>
 
           {/* Content container with top padding to account for sticky header */}
-          <div className="pt-4">
-              <Catalog data={paginatedCatalog} isAdmin={isAdmin}></Catalog>
+          <div className="pt-16 md:pt-4">
+              <Catalog
+                data={paginatedCatalog}
+                isAdmin={isAdmin}
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={handleSort}
+              ></Catalog>
           </div>
 
           <CreateItemModal

@@ -13,8 +13,11 @@ import { ConfirmDeleteModal } from "../ui/confirm-delete-modal";
 import { EditItemModal, EditableItem } from "../ui/edit-item-modal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { useState, useEffect } from "react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import { PencilIcon, TrashIcon, ReturnIcon, CheckoutIcon, InfoIcon } from "../icons";
 import { deleteProduct, updateProduct, checkoutBook, returnBook } from "../../app/(dashboard)/actions";
+import { SORT_COLUMNS, type SortColumn } from "../../lib/catalog-sort";
+import { MultiSelectDropdown, type MultiSelectOption } from "../ui/multi-select-dropdown";
 
 interface Order {
   number: number;
@@ -25,6 +28,7 @@ interface Order {
   categoryCount: number;
   categoryIndex: number;
   id: string;
+  sheetId: string | null;
   year: number;
   first: string;
   last: string;
@@ -42,7 +46,52 @@ interface Order {
   } | null; // Details about who checked it out and when
 }
 
-export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?: boolean }) {
+const SORT_OPTIONS: MultiSelectOption[] = SORT_COLUMNS.map((c) => ({ code: c.key, name: c.label }));
+
+function SortableHeader({
+  column,
+  label,
+  className,
+  sortColumn,
+  sortDirection,
+  onSort,
+}: {
+  column: SortColumn;
+  label: string;
+  className?: string;
+  sortColumn: SortColumn | null;
+  sortDirection: "asc" | "desc";
+  onSort?: (column: SortColumn) => void;
+}) {
+  const isActive = sortColumn === column;
+  return (
+    <TableCell
+      isHeader
+      className={`font-medium text-gray-500 text-start text-xs dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 ${className ?? ""}`}
+      onClick={() => onSort?.(column)}
+    >
+      <span className="flex items-center gap-1">
+        {label}
+        {isActive &&
+          (sortDirection === "asc" ? (
+            <ChevronUp className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          ))}
+      </span>
+    </TableCell>
+  );
+}
+
+interface CatalogProps {
+  data: any;
+  isAdmin?: boolean;
+  sortColumn?: SortColumn | null;
+  sortDirection?: "asc" | "desc";
+  onSort?: (column: SortColumn) => void;
+}
+
+export default function Catalog({ data, isAdmin = false, sortColumn = null, sortDirection = "asc", onSort }: CatalogProps) {
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -69,11 +118,12 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
         categoryCount: item.categorycount ?? "",
         categoryIndex: item.categoryindex ?? "",
         id: item.id ?? "",
+        sheetId: item.sheetId ?? null,
         year: item.pubyear ?? "",
         first: item.firstname ?? "",
         last: item.lastname ?? "",
         rev: item.rev ?? "",
-        editedtranslated: item.editedtranslated ?? "",
+        editedtranslated: item.editedTranslated ?? "",
         isCheckedOut: item.isCheckedOut ?? false,
         checkedOutByCurrentUser: item.checkedOutByCurrentUser ?? false,
         checkoutDetails: item.checkoutDetails ?? null
@@ -259,6 +309,32 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
       
       {/* Mobile Card Layout */}
       <div className="block md:hidden">
+        <div className="flex items-center gap-2 px-4 pt-4">
+          <MultiSelectDropdown
+            label="Sort by"
+            options={SORT_OPTIONS}
+            selected={sortColumn ? [sortColumn] : []}
+            onChange={(codes) => {
+              const next = codes[codes.length - 1];
+              if (next) onSort?.(next as SortColumn);
+            }}
+            className="flex-1"
+          />
+          {sortColumn && (
+            <button
+              type="button"
+              title={sortDirection === "asc" ? "Ascending" : "Descending"}
+              onClick={() => onSort?.(sortColumn)}
+              className="h-9 w-9 shrink-0 border border-gray-300 rounded-md flex items-center justify-center text-gray-500 hover:bg-gray-50"
+            >
+              {sortDirection === "asc" ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+          )}
+        </div>
         <div className="space-y-3 p-4">
           {tableData.map((order) => (
             <div 
@@ -335,7 +411,7 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
                     </div>
                   </div>
                   <div>
-                    <span className="font-medium text-gray-500">Year:</span>
+                    <span className="font-medium text-gray-500">Pub. Year:</span>
                     <div className="text-gray-700">{order.year}</div>
                   </div>
                   <div>
@@ -344,7 +420,27 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
                   </div>
                   <div>
                     <span className="font-medium text-gray-500">ID:</span>
-                    <div className="text-gray-700">{order.id}</div>
+                    <div className="text-gray-700">{order.sheetId ?? "—"}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500">Title Count:</span>
+                    <div className="text-gray-700">{order.count}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500">Category Count:</span>
+                    <div className="text-gray-700">{order.categoryCount}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500">Category Index:</span>
+                    <div className="text-gray-700">{order.categoryIndex}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500">Edited/Translated:</span>
+                    <div className="text-gray-700">
+                      {order.editedtranslated
+                        ? (Array.isArray(order.editedtranslated) ? order.editedtranslated.join(', ') : order.editedtranslated)
+                        : '—'}
+                    </div>
                   </div>
                 </div>
                 
@@ -382,72 +478,94 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
               {/* Table Header */}
               <TableHeader className="border-b border-[#e5e7eb]">
                 <TableRow className="">
-                  <TableCell
-                    isHeader
-                    className="px-2 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400"
-                  >
-                    #
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="py-3 px-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400"
-                  >
-                    Title
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="py-3 px-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400"
-                  >
-                    Category
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="px-3 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400 hidden lg:table-cell"
-                  >
-                    Language
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="px-3 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400 hidden xl:table-cell"
-                  >
-                    Count
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="px-3 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400 hidden xl:table-cell"
-                  >
-                    Cat. Count
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="px-3 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400 hidden xl:table-cell"
-                  >
-                    Cat. Index
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="px-3 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400 hidden lg:table-cell"
-                  >
-                    ID
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="px-3 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400"
-                  >
-                    Year
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="px-3 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400"
-                  >
-                    Author
-                  </TableCell>
-                  <TableCell
-                    isHeader
-                    className="px-3 py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400 hidden xl:table-cell"
-                  >
-                    Rev.
-                  </TableCell>
+                  <SortableHeader
+                    column="number"
+                    label="Acquisition #"
+                    className="px-2 py-3"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="title"
+                    label="Title"
+                    className="py-3 px-3"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="category"
+                    label="Category"
+                    className="py-3 px-3"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="language"
+                    label="Language"
+                    className="px-3 py-3 hidden lg:table-cell"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="titlecount"
+                    label="Title Count"
+                    className="px-3 py-3 hidden xl:table-cell"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="categorycount"
+                    label="Category Count"
+                    className="px-3 py-3 hidden xl:table-cell"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="categoryindex"
+                    label="Category Index"
+                    className="px-3 py-3 hidden xl:table-cell"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="sheetId"
+                    label="ID"
+                    className="px-3 py-3 hidden lg:table-cell"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="pubyear"
+                    label="Pub. Year"
+                    className="px-3 py-3"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="author"
+                    label="Author"
+                    className="px-3 py-3"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
+                  <SortableHeader
+                    column="editedTranslated"
+                    label="Edited/Translated"
+                    className="px-3 py-3 hidden xl:table-cell"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                  />
                 </TableRow>
               </TableHeader>
 
@@ -494,8 +612,8 @@ export default function Catalog({ data, isAdmin = false }: { data: any; isAdmin?
                       </div>
                     </TableCell>
                     <TableCell className="px-3 py-2 hidden lg:table-cell">
-                      <div className="text-gray-500 flex items-center truncate max-w-[80px]">
-                        {order.id}
+                      <div className="text-gray-500 flex items-center truncate max-w-[100px]">
+                        {order.sheetId ?? "—"}
                       </div>
                     </TableCell>
                     <TableCell className="px-3 py-2">
