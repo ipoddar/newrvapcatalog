@@ -17,7 +17,12 @@ if (!sesFromAddress) {
   throw new Error('Missing SES_FROM_ADDRESS env var');
 }
 
-const cognitoStack = new CognitoStack(app, 'RvapCognitoStack', { env, sesFromAddress });
+const siteUrl = process.env.SITE_URL;
+if (!siteUrl) {
+  throw new Error('Missing SITE_URL env var');
+}
+
+const cognitoStack = new CognitoStack(app, 'RvapCognitoStack', { env });
 const dataStack = new DataStack(app, 'RvapDataStack', { env });
 const apiStack = new ApiStack(app, 'RvapApiStack', {
   env,
@@ -26,6 +31,7 @@ const apiStack = new ApiStack(app, 'RvapApiStack', {
   userPool: cognitoStack.userPool,
   userPoolClient: cognitoStack.userPoolClient,
   sesFromAddress,
+  siteUrl,
 });
 new SiteStack(app, 'RvapSiteStack', { env });
 

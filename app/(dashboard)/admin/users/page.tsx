@@ -125,7 +125,6 @@ export default function AdminUsersPage() {
         method: 'POST',
         body: JSON.stringify({
           email: newUser.email.trim(),
-          password: newUser.password,
           firstName: newUser.firstName.trim(),
           lastName: newUser.lastName.trim(),
           isAdmin: newUser.isAdmin,

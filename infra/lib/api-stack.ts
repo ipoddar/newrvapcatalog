@@ -18,6 +18,7 @@ export interface ApiStackProps extends cdk.StackProps {
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
   sesFromAddress: string;
+  siteUrl: string;
 }
 
 const LAMBDA_DIR = path.join(__dirname, '..', 'lambda');
@@ -28,13 +29,14 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { catalogTable, checkoutsTable, userPool, userPoolClient, sesFromAddress } = props;
+    const { catalogTable, checkoutsTable, userPool, userPoolClient, sesFromAddress, siteUrl } = props;
 
     const commonEnv = {
       CATALOG_TABLE_NAME: catalogTable.tableName,
       CHECKOUTS_TABLE_NAME: checkoutsTable.tableName,
       SES_FROM_ADDRESS: sesFromAddress,
       USER_POOL_ID: userPool.userPoolId,
+      SITE_URL: siteUrl,
     };
 
     const makeFunction = (name: string, entry: string) =>
@@ -104,12 +106,12 @@ export class ApiStack extends cdk.Stack {
     // email/name/phone via a ListUsers filter (see checkoutBook.ts).
     checkoutBookFn.addToRolePolicy(listUsersPolicy);
 
-    // Admin user creation: provisions a Cognito user directly with a
-    // permanent password (no self-service verification step) and emails
-    // the new user their welcome message.
+    // Admin user creation: provisions a Cognito user with a randomly
+    // generated temporary password (leaving it in FORCE_CHANGE_PASSWORD
+    // status) and emails the new user their welcome message + credentials.
     adminCreateUserFn.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ['cognito-idp:AdminCreateUser', 'cognito-idp:AdminSetUserPassword'],
+        actions: ['cognito-idp:AdminCreateUser'],
         resources: [userPool.userPoolArn],
       })
     );

@@ -36,7 +36,11 @@ export function getSession(): Promise<CognitoUserSession | null> {
   });
 }
 
-export function signIn(email: string, password: string): Promise<CognitoUserSession> {
+export type SignInResult =
+  | { type: 'success'; session: CognitoUserSession }
+  | { type: 'newPasswordRequired'; cognitoUser: CognitoUser; userAttributes: Record<string, unknown> };
+
+export function signIn(email: string, password: string): Promise<SignInResult> {
   const user = new CognitoUser({ Username: email, Pool: getUserPool() });
   const authDetails = new AuthenticationDetails({
     Username: email,
@@ -45,65 +49,26 @@ export function signIn(email: string, password: string): Promise<CognitoUserSess
 
   return new Promise((resolve, reject) => {
     user.authenticateUser(authDetails, {
+      onSuccess: (session) => resolve({ type: 'success', session }),
+      onFailure: (err) => reject(err),
+      newPasswordRequired: (userAttributes) => {
+        // Cognito includes these in the challenge payload but rejects them
+        // if echoed back in completeNewPasswordChallenge — they must be
+        // stripped by the caller before submitting the new password.
+        resolve({ type: 'newPasswordRequired', cognitoUser: user, userAttributes });
+      },
+    });
+  });
+}
+
+export function completeNewPasswordChallenge(
+  cognitoUser: CognitoUser,
+  newPassword: string
+): Promise<CognitoUserSession> {
+  return new Promise((resolve, reject) => {
+    cognitoUser.completeNewPasswordChallenge(newPassword, {}, {
       onSuccess: (session) => resolve(session),
       onFailure: (err) => reject(err),
-    });
-  });
-}
-
-export function signUp(params: {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-}): Promise<{ userConfirmed: boolean }> {
-  const attributes = [
-    new CognitoUserAttribute({
-      Name: 'name',
-      Value: `${params.firstName} ${params.lastName}`,
-    }),
-    new CognitoUserAttribute({ Name: 'custom:admin', Value: 'false' }),
-  ];
-
-  return new Promise((resolve, reject) => {
-    getUserPool().signUp(
-      params.email,
-      params.password,
-      attributes,
-      [],
-      (err, result) => {
-        if (err || !result) {
-          reject(err);
-          return;
-        }
-        resolve({ userConfirmed: result.userConfirmed });
-      }
-    );
-  });
-}
-
-export function confirmSignUp(email: string, code: string): Promise<void> {
-  const user = new CognitoUser({ Username: email, Pool: getUserPool() });
-  return new Promise((resolve, reject) => {
-    user.confirmRegistration(code, true, (err) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-export function resendConfirmationCode(email: string): Promise<void> {
-  const user = new CognitoUser({ Username: email, Pool: getUserPool() });
-  return new Promise((resolve, reject) => {
-    user.resendConfirmationCode((err) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve();
     });
   });
 }

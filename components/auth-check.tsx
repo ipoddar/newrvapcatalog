@@ -4,7 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getSession } from '@/utils/cognito/client';
 
-const AUTH_PAGES = ['/login', '/signup', '/verify-email'];
+const AUTH_PAGES = ['/login'];
 
 export default function AuthCheck({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -21,19 +21,13 @@ export default function AuthCheck({ children }: { children: React.ReactNode }) {
       try {
         const session = await getSession();
         const isAuthenticated = Boolean(session?.isValid());
-        const emailVerified =
-          session?.getIdToken().payload.email_verified === true ||
-          session?.getIdToken().payload.email_verified === 'true';
 
         if (!isMounted) return;
 
         if (!isAuthenticated && !isAuthPage) {
           router.push('/login');
           setIsAllowed(false);
-        } else if (isAuthenticated && !emailVerified && pathname !== '/verify-email') {
-          router.push('/verify-email');
-          setIsAllowed(false);
-        } else if (isAuthenticated && emailVerified && (pathname === '/login' || pathname === '/signup')) {
+        } else if (isAuthenticated && pathname === '/login') {
           router.push('/');
           setIsAllowed(false);
         } else {

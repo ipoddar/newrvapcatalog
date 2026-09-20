@@ -14,7 +14,6 @@ interface AddUserModalProps {
 
 export interface NewUser {
   email: string;
-  password: string;
   firstName: string;
   lastName: string;
   isAdmin: boolean;
@@ -28,7 +27,6 @@ export function AddUserModal({
 }: AddUserModalProps) {
   const [formData, setFormData] = useState<NewUser>({
     email: "",
-    password: "",
     firstName: "",
     lastName: "",
     isAdmin: false,
@@ -37,7 +35,7 @@ export function AddUserModal({
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({ email: "", password: "", firstName: "", lastName: "", isAdmin: false });
+      setFormData({ email: "", firstName: "", lastName: "", isAdmin: false });
       setErrors({});
     }
   }, [isOpen]);
@@ -62,9 +60,6 @@ export function AddUserModal({
     } else if (!emailRegex.test(formData.email.trim())) {
       newErrors.email = "Enter a valid email address";
     }
-    if (!formData.password || formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-    }
     if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
 
@@ -83,8 +78,9 @@ export function AddUserModal({
         <div className="mb-4">
           <h3 className="text-lg font-medium text-gray-900 mb-2">Add New User</h3>
           <p className="text-sm text-gray-500">
-            Creates a confirmed account with a permanent password — no email
-            verification step required.
+            A welcome email with a temporary password, sign-in link, and catalog
+            instructions will be sent automatically. They'll be asked to set
+            their own password on first sign-in.
           </p>
         </div>
 
@@ -121,18 +117,6 @@ export function AddUserModal({
               className={errors.email ? "border-red-500" : ""}
             />
             {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-            <Input
-              type="text"
-              value={formData.password}
-              onChange={(e) => handleChange("password", e.target.value)}
-              placeholder="Min. 6 characters"
-              className={errors.password ? "border-red-500" : ""}
-            />
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
           </div>
 
           <label className="flex items-center gap-2 text-sm text-gray-700">
