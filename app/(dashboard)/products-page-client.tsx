@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { File, PlusCircle } from 'lucide-react';
 import { CreateItemModal } from "@/components/ui/create-item-modal";
+import { LoginGateModal } from "@/components/ui/login-gate-modal";
+import { useLoginGate } from "@/components/use-login-gate";
 import { MultiSelectDropdown, MultiSelectOption } from "@/components/ui/multi-select-dropdown";
 import type { CatalogItem } from "./page";
 import {
@@ -64,6 +66,7 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreateSlow, setIsCreateSlow] = useState(false);
+  const { isGateOpen, withLoginGate, handleGateSuccess, handleGateClose } = useLoginGate();
 
   const [sortColumn, setSortColumn] = useState<SortColumn | null>("number");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -1050,7 +1053,7 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
                       </span>
                   </Button>
                   {isAdmin && (
-                    <Button size="sm" className="hover:bg-white hover:text-black h-8 gap-1 border w-full md:w-auto text-xs md:text-sm" onClick={() => setCreateModalOpen(true)}>
+                    <Button size="sm" className="hover:bg-white hover:text-black h-8 gap-1 border w-full md:w-auto text-xs md:text-sm" onClick={() => withLoginGate(() => setCreateModalOpen(true))()}>
                         <PlusCircle className="h-3 w-3 md:h-3.5 md:w-3.5" />
                         <span className="md:sr-only lg:not-sr-only lg:whitespace-nowrap">
                             Add Book
@@ -1244,6 +1247,12 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
             onSave={handleCreateItem}
             isCreating={isCreating}
             isSlow={isCreateSlow}
+          />
+
+          <LoginGateModal
+            isOpen={isGateOpen}
+            onClose={handleGateClose}
+            onSuccess={handleGateSuccess}
           />
       </Tabs>
   );

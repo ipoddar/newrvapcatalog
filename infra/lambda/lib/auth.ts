@@ -19,6 +19,18 @@ export function requireAuth(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   return { sub, claims };
 }
 
+// For routes with no JWT authorizer attached (public browsing) —
+// event.requestContext.authorizer is undefined there, so getClaims()
+// would throw a raw TypeError. Returns an empty identity instead of
+// throwing, letting callers personalize for a signed-in caller while
+// still working for an anonymous one.
+export function optionalAuth(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
+  const authorizer = event.requestContext.authorizer as { jwt?: { claims: Record<string, unknown> } } | undefined;
+  const claims = authorizer?.jwt?.claims ?? {};
+  const sub = claims.sub as string | undefined;
+  return { sub, claims };
+}
+
 export function requireAdmin(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   const auth = requireAuth(event);
   if (auth.claims['custom:admin'] !== 'true') {

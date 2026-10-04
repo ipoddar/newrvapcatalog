@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { BookOpen } from 'lucide-react';
 import { apiUrl, authedRequestInit } from '@/utils/api-client';
+import { isLoggedIn } from '@/utils/cognito/client';
 import { ReturnIcon } from '@/components/icons';
 import type { CatalogItem } from '../page';
 
@@ -18,8 +20,10 @@ function formatDaysAgo(days: number): string {
 }
 
 export default function MyCheckoutsPage() {
+  const router = useRouter();
   const [checkouts, setCheckouts] = useState<CatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isChecking, setIsChecking] = useState(true);
   const [error, setError] = useState('');
   const [returningId, setReturningId] = useState<string | null>(null);
 
@@ -38,6 +42,17 @@ export default function MyCheckoutsPage() {
     let isMounted = true;
 
     async function load() {
+      // This page shows personal data — unlike the catalog, which is now
+      // public, it needs its own guard now that AuthCheck no longer
+      // blocks the whole dashboard shell.
+      const loggedIn = await isLoggedIn();
+      if (!isMounted) return;
+      if (!loggedIn) {
+        router.push('/login');
+        return;
+      }
+      setIsChecking(false);
+
       try {
         await loadCheckouts();
       } catch (err) {
@@ -52,7 +67,7 @@ export default function MyCheckoutsPage() {
     return () => {
       isMounted = false;
     };
-  }, [loadCheckouts]);
+  }, [router, loadCheckouts]);
 
   const handleReturn = async (bookId: string) => {
     setReturningId(bookId);
@@ -71,7 +86,7 @@ export default function MyCheckoutsPage() {
     }
   };
 
-  if (isLoading) {
+  if (isChecking || isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="text-center">

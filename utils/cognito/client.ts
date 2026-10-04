@@ -97,6 +97,11 @@ export function changePassword(oldPassword: string, newPassword: string): Promis
   });
 }
 
+export async function isLoggedIn(): Promise<boolean> {
+  const session = await getSession();
+  return Boolean(session?.isValid());
+}
+
 export function signOut(): void {
   getCurrentCognitoUser()?.signOut();
 }

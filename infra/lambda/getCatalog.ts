@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE, BOOK_REQUESTS_TABLE, COUNTER_ID } from './lib/dynamo';
-import { requireAuth } from './lib/auth';
+import { optionalAuth } from './lib/auth';
 import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
 
@@ -26,7 +26,8 @@ export async function handler(
   }
 
   return handle(async () => {
-    const { sub } = requireAuth(event);
+    const { sub, claims } = optionalAuth(event);
+    const isAdmin = claims['custom:admin'] === 'true';
 
     const [catalogItems, checkoutItems, requestItems] = await Promise.all([
       scanAll(CATALOG_TABLE),
@@ -110,11 +111,15 @@ export async function handler(
         requestedByCurrentUser: requestedBookIdsByUser.has(String(book.id)),
         heldForCurrentUser: holdActive && holdForUserId === sub,
         isOnHoldForOther: holdActive && holdForUserId !== sub,
+        // Email/phone are only meaningful for an admin coordinating a
+        // return — now that this route has no authorizer (public
+        // browsing), redact them for anyone else so a holder's contact
+        // info isn't exposed to anonymous visitors or other members.
         checkoutDetails: checkout
           ? {
               userDisplay: checkout.userName,
-              userEmail: checkout.userEmail,
-              userPhone: checkout.userPhone,
+              userEmail: isAdmin ? checkout.userEmail : '',
+              userPhone: isAdmin ? checkout.userPhone : '',
               checkedOutDate: new Date(checkout.checkedOutAt).toLocaleDateString(),
               checkedOutAtIso: checkout.checkedOutAt,
               lastReminderSentAt: checkout.lastReminderSentAt ?? null,

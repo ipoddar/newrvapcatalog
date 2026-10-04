@@ -222,7 +222,18 @@ export class ApiStack extends cdk.Stack {
       });
     };
 
-    authorizedRoute('/catalog', [apigatewayv2.HttpMethod.GET], getCatalogFn);
+    // Public browsing: no authorizer attached, so this works for
+    // signed-out visitors — getCatalog.ts uses optionalAuth() and
+    // personalizes (checkedOutByCurrentUser, etc.) only when a valid JWT
+    // happens to be present. Every other route below stays authenticated.
+    httpApi.addRoutes({
+      path: '/catalog',
+      methods: [apigatewayv2.HttpMethod.GET],
+      integration: new integrations.HttpLambdaIntegration(
+        `${getCatalogFn.node.id}Integration`,
+        getCatalogFn
+      ),
+    });
     authorizedRoute('/catalog', [apigatewayv2.HttpMethod.POST], createItemFn);
     authorizedRoute('/catalog/{id}', [apigatewayv2.HttpMethod.PUT], updateItemFn);
     authorizedRoute('/catalog/{id}', [apigatewayv2.HttpMethod.DELETE], deleteItemFn);

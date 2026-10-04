@@ -19,6 +19,8 @@ import { BellRing } from "lucide-react";
 import { deleteProduct, updateProduct, checkoutBook, returnBook, requestBook } from "../../app/(dashboard)/actions";
 import { SORT_COLUMNS, type SortColumn } from "../../lib/catalog-sort";
 import { MultiSelectDropdown, type MultiSelectOption } from "../ui/multi-select-dropdown";
+import { LoginGateModal } from "../ui/login-gate-modal";
+import { useLoginGate } from "../use-login-gate";
 
 interface Order {
   number: number;
@@ -108,6 +110,7 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
   const [checkoutStates, setCheckoutStates] = useState<{ [key: string]: boolean }>({});
   const [requestStates, setRequestStates] = useState<{ [key: string]: boolean }>({});
   const [showCheckoutDetails, setShowCheckoutDetails] = useState<{ [key: string]: boolean }>({});
+  const { isGateOpen, withLoginGate, handleGateSuccess, handleGateClose } = useLoginGate();
 
   // Since data is already a flat array when passed from products-page-client,
   // we don't need to navigate nested properties
@@ -143,7 +146,7 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
   const currentStart = paginationInfo ? (paginationInfo.page - 1) * paginationInfo.pageSize + 1 : 1;
   const currentEnd = paginationInfo ? Math.min(paginationInfo.page * paginationInfo.pageSize, paginationInfo.total) : tableData.length;
 
-  const handleEdit = (order: Order) => {
+  const handleEditImpl = (order: Order) => {
     const editableItem: EditableItem = {
       title: order.title,
       category: order.category,
@@ -196,7 +199,7 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
     }
   };
 
-  const handleDelete = (id: string, title: string) => {
+  const handleDeleteImpl = (id: string, title: string) => {
     setSelectedOrderId(id);
     setSelectedOrderTitle(title);
     setDeleteModalOpen(true);
@@ -248,7 +251,7 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
     }
   };
 
-  const handleCheckout = async (bookId: string) => {
+  const handleCheckoutImpl = async (bookId: string) => {
     setCheckoutStates(prev => ({ ...prev, [bookId]: true }));
     try {
       const formData = new FormData();
@@ -271,7 +274,7 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
     }
   };
 
-  const handleReturn = async (bookId: string) => {
+  const handleReturnImpl = async (bookId: string) => {
     setCheckoutStates(prev => ({ ...prev, [bookId]: true }));
     try {
       const formData = new FormData();
@@ -293,7 +296,7 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
     }
   };
 
-  const handleRequest = async (bookId: string) => {
+  const handleRequestImpl = async (bookId: string) => {
     setRequestStates(prev => ({ ...prev, [bookId]: true }));
     try {
       const formData = new FormData();
@@ -314,6 +317,17 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
       setRequestStates(prev => ({ ...prev, [bookId]: false }));
     }
   };
+
+  // Every mutating action is gated the same way: an anonymous visitor
+  // sees a sign-in modal instead of a 401/403 from the Lambda; the
+  // *Impl function underneath re-runs automatically once they're signed
+  // in. The catalog itself is public now, so these are the only checks
+  // standing between an anonymous visitor and a protected endpoint.
+  const handleCheckout = (bookId: string) => withLoginGate(() => handleCheckoutImpl(bookId))();
+  const handleReturn = (bookId: string) => withLoginGate(() => handleReturnImpl(bookId))();
+  const handleRequest = (bookId: string) => withLoginGate(() => handleRequestImpl(bookId))();
+  const handleEdit = (order: Order) => withLoginGate(() => handleEditImpl(order))();
+  const handleDelete = (id: string, title: string) => withLoginGate(() => handleDeleteImpl(id, title))();
 
   const toggleCheckoutDetails = (orderId: string) => {
     setShowCheckoutDetails(prev => ({ 
@@ -859,6 +873,12 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
         itemName={selectedOrderTitle || undefined}
         isDeleting={isDeleting}
         isSlow={isDeleteSlow}
+      />
+
+      <LoginGateModal
+        isOpen={isGateOpen}
+        onClose={handleGateClose}
+        onSuccess={handleGateSuccess}
       />
     </div>
     </TooltipProvider>
