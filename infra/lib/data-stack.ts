@@ -5,6 +5,7 @@ import { Construct } from 'constructs';
 export class DataStack extends cdk.Stack {
   public readonly catalogTable: dynamodb.Table;
   public readonly checkoutsTable: dynamodb.Table;
+  public readonly bookRequestsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -17,6 +18,17 @@ export class DataStack extends cdk.Stack {
 
     this.checkoutsTable = new dynamodb.Table(this, 'CheckoutsTable', {
       partitionKey: { name: 'bookId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // One row per pending "notify me when this is returned" request.
+    // requesterUserId as sort key both enforces "one open request per
+    // user per book" (conditional put) and lets us query a book's whole
+    // queue, ordered by request time via the requestedAt attribute.
+    this.bookRequestsTable = new dynamodb.Table(this, 'BookRequestsTable', {
+      partitionKey: { name: 'bookId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'requesterUserId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });

@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE, COUNTER_ID } from './lib/dynamo';
+import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE, BOOK_REQUESTS_TABLE, COUNTER_ID } from './lib/dynamo';
 import { requireAuth } from './lib/auth';
 import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
@@ -28,14 +28,20 @@ export async function handler(
   return handle(async () => {
     const { sub } = requireAuth(event);
 
-    const [catalogItems, checkoutItems] = await Promise.all([
+    const [catalogItems, checkoutItems, requestItems] = await Promise.all([
       scanAll(CATALOG_TABLE),
       scanAll(CHECKOUTS_TABLE),
+      scanAll(BOOK_REQUESTS_TABLE),
     ]);
 
     const catalog = catalogItems.filter((item) => item.id !== COUNTER_ID);
     const checkoutsByBookId = new Map(
       checkoutItems.map((checkout) => [checkout.bookId, checkout])
+    );
+    const requestedBookIdsByUser = new Set(
+      requestItems
+        .filter((r) => r.requesterUserId === sub)
+        .map((r) => String(r.bookId))
     );
 
     // categorycount/categoryindex/titlecount are display-only fields derived
@@ -92,11 +98,18 @@ export async function handler(
         | undefined;
       const derived = derivedById.get(String(book.id));
 
+      const holdForUserId = book.holdForUserId as string | undefined;
+      const holdExpiresAt = book.holdExpiresAt as string | undefined;
+      const holdActive = Boolean(holdForUserId && holdExpiresAt && Date.parse(holdExpiresAt) > Date.now());
+
       return {
         ...book,
         ...derived,
         isCheckedOut: Boolean(checkout),
         checkedOutByCurrentUser: checkout?.userId === sub,
+        requestedByCurrentUser: requestedBookIdsByUser.has(String(book.id)),
+        heldForCurrentUser: holdActive && holdForUserId === sub,
+        isOnHoldForOther: holdActive && holdForUserId !== sub,
         checkoutDetails: checkout
           ? {
               userDisplay: checkout.userName,

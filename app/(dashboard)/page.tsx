@@ -21,6 +21,9 @@ export interface CatalogItem {
   categoryindex: number;
   isCheckedOut: boolean;
   checkedOutByCurrentUser: boolean;
+  requestedByCurrentUser: boolean;
+  heldForCurrentUser: boolean;
+  isOnHoldForOther: boolean;
   checkoutDetails: {
     userDisplay: string;
     userEmail: string;

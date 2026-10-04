@@ -17,7 +17,7 @@ import {
 import { AddUserModal, NewUser } from '@/components/ui/add-user-modal';
 import { AdminCheckoutModal, AvailableBook } from '@/components/ui/admin-checkout-modal';
 import { SetPasswordModal } from '@/components/ui/set-password-modal';
-import { PlusCircle, KeyRound } from 'lucide-react';
+import { PlusCircle, KeyRound, BellRing } from 'lucide-react';
 import { ReturnIcon, CheckoutIcon } from '@/components/icons';
 
 interface CheckedOutBook {
@@ -26,6 +26,7 @@ interface CheckedOutBook {
   category: string;
   checkedOutAt: string;
   lastReminderSentAt: string | null;
+  pendingRequestCount: number;
 }
 
 interface AdminUser {
@@ -53,6 +54,7 @@ export default function AdminUsersPage() {
   const [checkoutForUser, setCheckoutForUser] = useState<AdminUser | null>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [returningBookId, setReturningBookId] = useState<string | null>(null);
+  const [notifyingBookId, setNotifyingBookId] = useState<string | null>(null);
 
   const [passwordForUser, setPasswordForUser] = useState<AdminUser | null>(null);
   const [isSettingPassword, setIsSettingPassword] = useState(false);
@@ -207,6 +209,23 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleNotifyHolder = async (bookId: string) => {
+    setNotifyingBookId(bookId);
+    try {
+      const init = await authedRequestInit({ method: 'POST' });
+      const response = await fetch(apiUrl(`/catalog/${encodeURIComponent(bookId)}/notify-holder`), init);
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Failed to notify holder');
+      }
+      alert('The current holder has been emailed.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to notify holder');
+    } finally {
+      setNotifyingBookId(null);
+    }
+  };
+
   if (isChecking || isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -276,15 +295,33 @@ export default function AdminUsersPage() {
                                 <> · last reminder {new Date(book.lastReminderSentAt).toLocaleDateString()}</>
                               )}
                             </div>
+                            {book.pendingRequestCount > 0 && (
+                              <div className="text-xs text-blue-600 font-medium mt-0.5">
+                                {book.pendingRequestCount} member{book.pendingRequestCount > 1 ? 's' : ''} waiting
+                              </div>
+                            )}
                           </div>
-                          <div
-                            title="Return this book"
-                            onClick={() => !returningBookId && handleAdminReturn(book.bookId)}
-                            className={`p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer shrink-0 ${
-                              returningBookId === book.bookId ? 'opacity-50' : 'hover:bg-blue-500'
-                            }`}
-                          >
-                            <ReturnIcon height={14} color="#6b7280" />
+                          <div className="flex items-center gap-1 shrink-0">
+                            {book.pendingRequestCount > 0 && (
+                              <div
+                                title="Nudge the current holder to return this book"
+                                onClick={() => !notifyingBookId && handleNotifyHolder(book.bookId)}
+                                className={`p-1 border-blue-300 bg-blue-50 border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
+                                  notifyingBookId === book.bookId ? 'opacity-50' : 'hover:bg-blue-100'
+                                }`}
+                              >
+                                <BellRing className="h-3.5 w-3.5 text-blue-600" />
+                              </div>
+                            )}
+                            <div
+                              title="Return this book"
+                              onClick={() => !returningBookId && handleAdminReturn(book.bookId)}
+                              className={`p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
+                                returningBookId === book.bookId ? 'opacity-50' : 'hover:bg-blue-500'
+                              }`}
+                            >
+                              <ReturnIcon height={14} color="#6b7280" />
+                            </div>
                           </div>
                         </div>
                       ))}

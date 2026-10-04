@@ -15,6 +15,7 @@ import { Construct } from 'constructs';
 export interface ApiStackProps extends cdk.StackProps {
   catalogTable: dynamodb.Table;
   checkoutsTable: dynamodb.Table;
+  bookRequestsTable: dynamodb.Table;
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
   sesFromAddress: string;
@@ -29,11 +30,12 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { catalogTable, checkoutsTable, userPool, userPoolClient, sesFromAddress, siteUrl } = props;
+    const { catalogTable, checkoutsTable, bookRequestsTable, userPool, userPoolClient, sesFromAddress, siteUrl } = props;
 
     const commonEnv = {
       CATALOG_TABLE_NAME: catalogTable.tableName,
       CHECKOUTS_TABLE_NAME: checkoutsTable.tableName,
+      BOOK_REQUESTS_TABLE_NAME: bookRequestsTable.tableName,
       SES_FROM_ADDRESS: sesFromAddress,
       USER_POOL_ID: userPool.userPoolId,
       SITE_URL: siteUrl,
@@ -64,28 +66,35 @@ export class ApiStack extends cdk.Stack {
     const getUsersFn = makeFunction('GetUsersFn', 'getUsers.ts');
     const adminCreateUserFn = makeFunction('AdminCreateUserFn', 'adminCreateUser.ts');
     const adminSetPasswordFn = makeFunction('AdminSetPasswordFn', 'adminSetPassword.ts');
+    const requestBookFn = makeFunction('RequestBookFn', 'requestBook.ts');
+    const notifyHolderFn = makeFunction('NotifyHolderFn', 'notifyHolder.ts');
 
     // Not API-routed — invoked only by the daily EventBridge schedule below.
     const sendOverdueRemindersFn = makeFunction(
       'SendOverdueRemindersFn',
       'sendOverdueReminders.ts'
     );
+    const expireHoldsFn = makeFunction('ExpireHoldsFn', 'expireHolds.ts');
 
     catalogTable.grantReadData(getCatalogFn);
     checkoutsTable.grantReadData(getCatalogFn);
+    bookRequestsTable.grantReadData(getCatalogFn);
 
+    catalogTable.grantReadWriteData(checkoutBookFn);
     checkoutsTable.grantWriteData(checkoutBookFn);
+    catalogTable.grantReadWriteData(returnBookFn);
     checkoutsTable.grantReadWriteData(returnBookFn);
+    bookRequestsTable.grantReadWriteData(returnBookFn);
 
     catalogTable.grantReadWriteData(createItemFn);
     catalogTable.grantReadWriteData(updateItemFn);
     catalogTable.grantWriteData(deleteItemFn);
     checkoutsTable.grantWriteData(deleteItemFn);
+    bookRequestsTable.grantReadWriteData(deleteItemFn);
 
-    // Checkout/return send confirmation emails; both also need read access
-    // to the Catalog table to look up the book's title.
-    catalogTable.grantReadData(checkoutBookFn);
-    catalogTable.grantReadData(returnBookFn);
+    // Checkout/return send confirmation emails and (return) promote the
+    // next queued requester (see lib/bookRequests.ts) — both already have
+    // Catalog/Checkouts/BookRequests access from the grants above.
     const sesSendPolicy = new iam.PolicyStatement({
       actions: ['ses:SendEmail', 'ses:SendRawEmail'],
       resources: ['*'],
@@ -93,10 +102,21 @@ export class ApiStack extends cdk.Stack {
     checkoutBookFn.addToRolePolicy(sesSendPolicy);
     returnBookFn.addToRolePolicy(sesSendPolicy);
 
-    // Admin user directory: reads all Cognito users plus every checkout,
-    // joined against the Catalog table for book titles.
+    // Request/notify-holder: a user requesting a book reads Checkouts (is
+    // it actually out?) and writes BookRequests; an admin forwarding a
+    // nudge reads Checkouts/Catalog and sends via SES.
+    checkoutsTable.grantReadData(requestBookFn);
+    catalogTable.grantReadData(requestBookFn);
+    bookRequestsTable.grantReadWriteData(requestBookFn);
+    checkoutsTable.grantReadData(notifyHolderFn);
+    catalogTable.grantReadData(notifyHolderFn);
+    notifyHolderFn.addToRolePolicy(sesSendPolicy);
+
+    // Admin user directory: reads all Cognito users plus every checkout
+    // and pending request, joined against the Catalog table for titles.
     checkoutsTable.grantReadData(getUsersFn);
     catalogTable.grantReadData(getUsersFn);
+    bookRequestsTable.grantReadData(getUsersFn);
     const listUsersPolicy = new iam.PolicyStatement({
       actions: ['cognito-idp:ListUsers'],
       resources: [userPool.userPoolArn],
@@ -139,6 +159,17 @@ export class ApiStack extends cdk.Stack {
     new events.Rule(this, 'OverdueRemindersScheduleRule', {
       schedule: events.Schedule.rate(cdk.Duration.days(1)),
       targets: [new targets.LambdaFunction(sendOverdueRemindersFn)],
+    });
+
+    // Expired holds: a hold a requester didn't claim within 48h releases
+    // and promotes the next person in that book's queue (see
+    // expireHolds.ts / lib/bookRequests.ts).
+    catalogTable.grantReadWriteData(expireHoldsFn);
+    bookRequestsTable.grantReadWriteData(expireHoldsFn);
+    expireHoldsFn.addToRolePolicy(sesSendPolicy);
+    new events.Rule(this, 'ExpireHoldsScheduleRule', {
+      schedule: events.Schedule.rate(cdk.Duration.days(1)),
+      targets: [new targets.LambdaFunction(expireHoldsFn)],
     });
 
     // Warm pool: ping every 5 minutes with a static payload the handler
@@ -204,6 +235,16 @@ export class ApiStack extends cdk.Stack {
       '/catalog/{id}/return',
       [apigatewayv2.HttpMethod.POST],
       returnBookFn
+    );
+    authorizedRoute(
+      '/catalog/{id}/request',
+      [apigatewayv2.HttpMethod.POST],
+      requestBookFn
+    );
+    authorizedRoute(
+      '/catalog/{id}/notify-holder',
+      [apigatewayv2.HttpMethod.POST],
+      notifyHolderFn
     );
     authorizedRoute('/admin/users', [apigatewayv2.HttpMethod.GET], getUsersFn);
     authorizedRoute('/admin/users', [apigatewayv2.HttpMethod.POST], adminCreateUserFn);

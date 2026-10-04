@@ -151,3 +151,23 @@ export async function returnBook(formData: FormData): Promise<ActionResult> {
   if (!bookId) return { success: false, error: 'Book ID is required' };
   return warmRequest('/return', bookId);
 }
+
+// requestBook/notifyHolder are low-frequency, not kept in the warm pool —
+// same cold-start-hint pattern as the admin CRUD actions above.
+export async function requestBook(
+  formData: FormData,
+  onSlow?: () => void
+): Promise<ActionResult> {
+  const bookId = formData.get('bookId') as string;
+  if (!bookId) return { success: false, error: 'Book ID is required' };
+  return adminRequest(`/catalog/${encodeURIComponent(bookId)}/request`, 'POST', {}, onSlow);
+}
+
+export async function notifyHolder(
+  formData: FormData,
+  onSlow?: () => void
+): Promise<ActionResult> {
+  const bookId = formData.get('bookId') as string;
+  if (!bookId) return { success: false, error: 'Book ID is required' };
+  return adminRequest(`/catalog/${encodeURIComponent(bookId)}/notify-holder`, 'POST', {}, onSlow);
+}

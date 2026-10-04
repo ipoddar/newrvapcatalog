@@ -15,7 +15,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/
 import { useState, useEffect } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { PencilIcon, TrashIcon, ReturnIcon, CheckoutIcon, InfoIcon } from "../icons";
-import { deleteProduct, updateProduct, checkoutBook, returnBook } from "../../app/(dashboard)/actions";
+import { BellRing } from "lucide-react";
+import { deleteProduct, updateProduct, checkoutBook, returnBook, requestBook } from "../../app/(dashboard)/actions";
 import { SORT_COLUMNS, type SortColumn } from "../../lib/catalog-sort";
 import { MultiSelectDropdown, type MultiSelectOption } from "../ui/multi-select-dropdown";
 
@@ -36,6 +37,9 @@ interface Order {
   editedtranslated: string | string[] | null; // Add missing field
   isCheckedOut?: boolean; // Checkout status
   checkedOutByCurrentUser?: boolean; // Whether current user has checked it out
+  requestedByCurrentUser?: boolean; // Whether current user has an open request for it
+  heldForCurrentUser?: boolean; // Whether a return-triggered hold is reserved for current user
+  isOnHoldForOther?: boolean; // Whether a hold is reserved for someone else
   checkoutDetails?: {
     user_id: string;
     checked_out_at: string;
@@ -102,6 +106,7 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
   const [isEditSlow, setIsEditSlow] = useState(false);
   const [isDeleteSlow, setIsDeleteSlow] = useState(false);
   const [checkoutStates, setCheckoutStates] = useState<{ [key: string]: boolean }>({});
+  const [requestStates, setRequestStates] = useState<{ [key: string]: boolean }>({});
   const [showCheckoutDetails, setShowCheckoutDetails] = useState<{ [key: string]: boolean }>({});
 
   // Since data is already a flat array when passed from products-page-client,
@@ -126,6 +131,9 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
         editedtranslated: item.editedTranslated ?? "",
         isCheckedOut: item.isCheckedOut ?? false,
         checkedOutByCurrentUser: item.checkedOutByCurrentUser ?? false,
+        requestedByCurrentUser: item.requestedByCurrentUser ?? false,
+        heldForCurrentUser: item.heldForCurrentUser ?? false,
+        isOnHoldForOther: item.isOnHoldForOther ?? false,
         checkoutDetails: item.checkoutDetails ?? null
       }))
     : [];
@@ -268,9 +276,9 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
     try {
       const formData = new FormData();
       formData.append('bookId', bookId);
-      
+
       const result = await returnBook(formData);
-      
+
       if (result.success) {
         // Refresh the page to show updated data
         window.location.reload();
@@ -282,6 +290,28 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
       alert('An error occurred while returning the book');
     } finally {
       setCheckoutStates(prev => ({ ...prev, [bookId]: false }));
+    }
+  };
+
+  const handleRequest = async (bookId: string) => {
+    setRequestStates(prev => ({ ...prev, [bookId]: true }));
+    try {
+      const formData = new FormData();
+      formData.append('bookId', bookId);
+
+      const result = await requestBook(formData);
+
+      if (result.success) {
+        alert("You'll be emailed when this book is returned.");
+        window.location.reload();
+      } else {
+        alert(`Failed to request book: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Request error:', error);
+      alert('An error occurred while requesting the book');
+    } finally {
+      setRequestStates(prev => ({ ...prev, [bookId]: false }));
     }
   };
 
@@ -357,17 +387,38 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
                       <ReturnIcon height={16} color="#6b7280"></ReturnIcon>
                     </div>
                   ) : order.isCheckedOut && order.checkoutDetails ? (
-                    <div
-                      title="View checkout details"
-                      className="p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer hover:bg-gray-100"
-                      onClick={() => toggleCheckoutDetails(order.id)}
-                      data-checkout-details
-                    >
-                      <InfoIcon height={16} color="#6b7280" />
-                    </div>
+                    <>
+                      <div
+                        title="View checkout details"
+                        className="p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer hover:bg-gray-100"
+                        onClick={() => toggleCheckoutDetails(order.id)}
+                        data-checkout-details
+                      >
+                        <InfoIcon height={16} color="#6b7280" />
+                      </div>
+                      {order.requestedByCurrentUser ? (
+                        <div title="You'll be emailed when this is returned" className="p-2 border-blue-300 bg-blue-50 border rounded flex justify-center items-center">
+                          <BellRing className="h-4 w-4 text-blue-600" />
+                        </div>
+                      ) : (
+                        <div
+                          title="Request this book — you'll be emailed when it's returned"
+                          className={`p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ${
+                            requestStates[order.id] ? 'opacity-50' : 'hover:bg-blue-100'
+                          }`}
+                          onClick={() => !requestStates[order.id] && handleRequest(order.id)}
+                        >
+                          <BellRing className="h-4 w-4 text-gray-500" />
+                        </div>
+                      )}
+                    </>
                   ) : order.isCheckedOut ? (
                     <div title="Checked out" className="hover:bg-red-500 p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer">
                       <InfoIcon height={16} color="#6b7280" />
+                    </div>
+                  ) : order.isOnHoldForOther ? (
+                    <div title="Reserved for another member" className="p-2 border-amber-300 bg-amber-50 border rounded flex justify-center items-center">
+                      <InfoIcon height={16} color="#b45309" />
                     </div>
                   ) : (
                     <div
@@ -451,7 +502,19 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
                     You have checked out this book
                   </div>
                 )}
-                
+
+                {order.heldForCurrentUser && (
+                  <div className="text-xs text-green-700 mt-2 font-medium">
+                    Reserved for you — check it out within 48 hours
+                  </div>
+                )}
+
+                {order.requestedByCurrentUser && (
+                  <div className="text-xs text-blue-600 mt-2 font-medium">
+                    You'll be emailed when this book is returned
+                  </div>
+                )}
+
                 {order.isCheckedOut && order.checkoutDetails && showCheckoutDetails[order.id] && (
                   <div className="mt-3 p-3 bg-gray-50 border rounded-md" data-checkout-details>
                     <div className="space-y-1">
@@ -655,43 +718,78 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
                             </Tooltip>
                           </div>
                         ) : order.isCheckedOut && order.checkoutDetails ? (
-                          <div className="space-y-1 relative">
-                            <Tooltip>
+                          <>
+                            <div className="space-y-1 relative">
+                              <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className="hover:bg-white p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer"
+                                      onClick={() => toggleCheckoutDetails(order.id)}
+                                      data-checkout-details
+                                    >
+                                      <InfoIcon height={14} color="#6b7280" />
+                                    </div>
+                                  </TooltipTrigger>
+                                <TooltipContent>
+                                  <div className="space-y-1">
+                                    <div className="text-s font-bold leading-none ">{order.checkoutDetails.userDisplay}</div>
+                                    <div className="text-xs leading-none text-muted-foreground">Since {order.checkoutDetails.checkedOutDate}</div>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                              {showCheckoutDetails[order.id] && (
+                                <div className="absolute z-10 mt-1 right-0 p-2 bg-white border border-gray-200 rounded-md shadow-lg min-w-[200px]" data-checkout-details>
+                                  <div className="space-y-1">
+                                    <div className="text-sm font-bold leading-none text-gray-800">{order.checkoutDetails.userDisplay}</div>
+                                    {order.checkoutDetails.userEmail && (
+                                        <div className="text-xs leading-none text-gray-600">{order.checkoutDetails.userEmail}</div>
+                                    )}
+                                    {order.checkoutDetails.userPhone && (
+                                        <div className="text-xs leading-none text-gray-600">{order.checkoutDetails.userPhone}</div>
+                                    )}
+                                      <div className="text-xs leading-none text-gray-500">Since {order.checkoutDetails.checkedOutDate}</div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            {order.requestedByCurrentUser ? (
+                              <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <div 
-                                    className="hover:bg-white p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer"
-                                    onClick={() => toggleCheckoutDetails(order.id)}
-                                    data-checkout-details
-                                  >
-                                    <InfoIcon height={14} color="#6b7280" />
-                                  </div>                          
+                                  <div className="p-1 border-blue-300 bg-blue-50 border rounded flex justify-center items-center ml-1">
+                                    <BellRing className="h-3.5 w-3.5 text-blue-600" />
+                                  </div>
                                 </TooltipTrigger>
-                              <TooltipContent>
-                                <div className="space-y-1">
-                                  <div className="text-s font-bold leading-none ">{order.checkoutDetails.userDisplay}</div>
-                                  <div className="text-xs leading-none text-muted-foreground">Since {order.checkoutDetails.checkedOutDate}</div>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                            {showCheckoutDetails[order.id] && (
-                              <div className="absolute z-10 mt-1 right-0 p-2 bg-white border border-gray-200 rounded-md shadow-lg min-w-[200px]" data-checkout-details>
-                                <div className="space-y-1">
-                                  <div className="text-sm font-bold leading-none text-gray-800">{order.checkoutDetails.userDisplay}</div>
-                                  {order.checkoutDetails.userEmail && (
-                                      <div className="text-xs leading-none text-gray-600">{order.checkoutDetails.userEmail}</div>
-                                  )}
-                                  {order.checkoutDetails.userPhone && (
-                                      <div className="text-xs leading-none text-gray-600">{order.checkoutDetails.userPhone}</div>
-                                  )}
-                                    <div className="text-xs leading-none text-gray-500">Since {order.checkoutDetails.checkedOutDate}</div>
-                                </div>
-                              </div>
+                                <TooltipContent>You'll be emailed when this is returned</TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div
+                                    className={`p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ml-1 ${
+                                      requestStates[order.id] ? 'opacity-50' : 'hover:bg-blue-100'
+                                    }`}
+                                    onClick={() => !requestStates[order.id] && handleRequest(order.id)}
+                                  >
+                                    <BellRing className="h-3.5 w-3.5 text-gray-500" />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>Request this book — you'll be emailed when it's returned</TooltipContent>
+                              </Tooltip>
                             )}
-                          </div>
+                          </>
                         ) : order.isCheckedOut ? (
                           <div className="hover:bg-red-500 p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer">
                             <InfoIcon height={14} color="#6b7280" />
                           </div>
+                        ) : order.isOnHoldForOther ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="p-1 border-amber-300 bg-amber-50 border rounded flex justify-center items-center">
+                                <InfoIcon height={14} color="#b45309" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>Reserved for another member</TooltipContent>
+                          </Tooltip>
                         ) : (
                           <Tooltip>
                             <TooltipTrigger asChild>

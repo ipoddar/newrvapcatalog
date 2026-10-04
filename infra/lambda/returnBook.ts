@@ -6,8 +6,9 @@ import { requireAuth, HttpError } from './lib/auth';
 import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
 import { sendEmail } from './lib/email';
+import { promoteNextRequester } from './lib/bookRequests';
 
-async function sendReturnConfirmation(bookId: string, userEmail: string) {
+async function sendReturnConfirmation(bookId: string, userEmail: string): Promise<string> {
   const book = await ddb.send(
     new GetCommand({ TableName: CATALOG_TABLE, Key: { id: bookId } })
   );
@@ -18,6 +19,8 @@ async function sendReturnConfirmation(bookId: string, userEmail: string) {
     'Return confirmation — RVAP Library Catalog',
     `You have returned "${title}". Thank you!\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
   );
+
+  return title;
 }
 
 export async function handler(
@@ -48,7 +51,8 @@ export async function handler(
         new DeleteCommand({ TableName: CHECKOUTS_TABLE, Key: { bookId } })
       );
       const userEmail = (existing.Item.userEmail as string) ?? '';
-      await sendReturnConfirmation(bookId, userEmail);
+      const title = await sendReturnConfirmation(bookId, userEmail);
+      await promoteNextRequester(bookId, title);
       return json(200, { success: true });
     }
 
@@ -69,7 +73,8 @@ export async function handler(
     }
 
     const userEmail = (claims.email as string) ?? '';
-    await sendReturnConfirmation(bookId, userEmail);
+    const title = await sendReturnConfirmation(bookId, userEmail);
+    await promoteNextRequester(bookId, title);
 
     return json(200, { success: true });
   });

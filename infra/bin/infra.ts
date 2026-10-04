@@ -28,6 +28,7 @@ const apiStack = new ApiStack(app, 'RvapApiStack', {
   env,
   catalogTable: dataStack.catalogTable,
   checkoutsTable: dataStack.checkoutsTable,
+  bookRequestsTable: dataStack.bookRequestsTable,
   userPool: cognitoStack.userPool,
   userPoolClient: cognitoStack.userPoolClient,
   sesFromAddress,

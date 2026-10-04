@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
-import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { CognitoIdentityProviderClient, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE } from './lib/dynamo';
@@ -65,6 +65,20 @@ export async function handler(
       userPhone = targetAttrs.phone_number ?? '';
     }
 
+    // A book returned to a requester's queue carries a 48h hold (see
+    // lib/bookRequests.ts) — only the hold-holder (or an admin checking
+    // out on their behalf) may claim it while the hold is active and
+    // unexpired; everyone else is blocked until it expires.
+    const existingBook = await ddb.send(
+      new GetCommand({ TableName: CATALOG_TABLE, Key: { id: bookId } })
+    );
+    const holdForUserId = existingBook.Item?.holdForUserId as string | undefined;
+    const holdExpiresAt = existingBook.Item?.holdExpiresAt as string | undefined;
+    const holdActive = Boolean(holdForUserId && holdExpiresAt && Date.parse(holdExpiresAt) > Date.now());
+    if (holdActive && holdForUserId !== checkoutUserId) {
+      throw new HttpError(409, 'This book is reserved for another member right now');
+    }
+
     try {
       await ddb.send(
         new PutCommand({
@@ -87,10 +101,17 @@ export async function handler(
       throw err;
     }
 
-    const book = await ddb.send(
-      new GetCommand({ TableName: CATALOG_TABLE, Key: { id: bookId } })
-    );
-    const title = (book.Item?.title as string) ?? 'this book';
+    const title = (existingBook.Item?.title as string) ?? 'this book';
+
+    if (holdForUserId) {
+      await ddb.send(
+        new UpdateCommand({
+          TableName: CATALOG_TABLE,
+          Key: { id: bookId },
+          UpdateExpression: 'REMOVE holdForUserId, holdForUserName, holdForUserEmail, holdExpiresAt',
+        })
+      );
+    }
 
     await sendEmail(
       userEmail,
