@@ -143,7 +143,8 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
       year: order.year,
       first: order.first,
       last: order.last,
-      editedtranslated: order.editedtranslated
+      editedtranslated: order.editedtranslated,
+      sheetId: order.sheetId ?? ''
     };
     
     setSelectedItem(editableItem);
@@ -165,6 +166,7 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
       formData.append('lastname', item.last || '');
       // The editedtranslated form field maps to the 'editedtranslated' database column
       formData.append('editedtranslated', Array.isArray(item.editedtranslated) ? item.editedtranslated.join(', ') : (item.editedtranslated || ''));
+      formData.append('sheetId', item.sheetId || '');
 
       const result = await updateProduct(formData, () => setIsEditSlow(true));
 

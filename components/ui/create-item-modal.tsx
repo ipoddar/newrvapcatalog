@@ -23,6 +23,7 @@ export interface CreateableItem {
     first: string;
     last: string;
     editedtranslated: string | string[] | null;
+    sheetId: string;
 }
 
 export function CreateItemModal({
@@ -39,7 +40,8 @@ export function CreateItemModal({
     year: 0,
     first: '',
     last: '',
-    editedtranslated: null
+    editedtranslated: null,
+    sheetId: ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -53,7 +55,8 @@ export function CreateItemModal({
         year: 0,
         first: '',
         last: '',
-        editedtranslated: null
+        editedtranslated: null,
+        sheetId: ''
       });
       setErrors({});
     }
@@ -189,7 +192,7 @@ export function CreateItemModal({
             Enter the catalog item information below.
           </p>
           <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-            <strong>Note:</strong> The Number, ID, Count, and Category Count will be automatically generated based on existing data in the catalog.
+            <strong>Note:</strong> The Acquisition #, Title Count, Category Count, and Category Index will be automatically generated based on existing data in the catalog.
           </div>
         </div>
 
@@ -374,12 +377,26 @@ export function CreateItemModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              ID
+            </label>
+            <Input
+              type="text"
+              value={formData.sheetId}
+              onChange={(e) => handleInputChange('sheetId', e.target.value)}
+              placeholder="Optional — e.g. 1029 VIV-E 5.1"
+              className={errors.sheetId ? 'border-red-500' : ''}
+            />
+            {errors.sheetId && <p className="text-red-500 text-xs mt-1">{errors.sheetId}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Edited/Translated
             </label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-between"
                 >
                   {(() => {

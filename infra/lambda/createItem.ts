@@ -13,6 +13,7 @@ interface CreateItemBody {
   firstname?: string;
   lastname?: string;
   editedTranslated?: string[] | null;
+  sheetId?: string | null;
 }
 
 export async function handler(
@@ -50,6 +51,7 @@ export async function handler(
       firstname: body.firstname?.trim() ?? '',
       lastname: body.lastname?.trim() ?? '',
       editedTranslated: body.editedTranslated ?? null,
+      sheetId: body.sheetId?.trim() || null,
     };
 
     await ddb.send(new PutCommand({ TableName: CATALOG_TABLE, Item: item }));

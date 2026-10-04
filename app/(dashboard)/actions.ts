@@ -62,6 +62,8 @@ export async function createProduct(
 
   const year = (formData.get('year') as string)?.trim();
 
+  const sheetId = ((formData.get('sheetId') as string) || '').trim();
+
   return adminRequest(
     '/catalog',
     'POST',
@@ -73,6 +75,7 @@ export async function createProduct(
       firstname: ((formData.get('firstname') as string) || '').trim(),
       lastname: ((formData.get('lastname') as string) || '').trim(),
       editedTranslated: optionalArray(formData.get('editedtranslated')),
+      sheetId: sheetId || null,
     },
     onSlow
   );
@@ -89,6 +92,8 @@ export async function updateProduct(
   const category = formData.get('category') as string;
   const year = (formData.get('year') as string)?.trim();
 
+  const sheetId = ((formData.get('sheetId') as string) || '').trim();
+
   return adminRequest(
     `/catalog/${encodeURIComponent(id)}`,
     'PUT',
@@ -100,6 +105,7 @@ export async function updateProduct(
       firstname: ((formData.get('firstname') as string) || '').trim(),
       lastname: ((formData.get('lastname') as string) || '').trim(),
       editedTranslated: optionalArray(formData.get('editedtranslated')),
+      sheetId: sheetId || null,
     },
     onSlow
   );

@@ -12,6 +12,7 @@ interface UpdateItemBody {
   firstname?: string;
   lastname?: string;
   editedTranslated?: string[] | null;
+  sheetId?: string | null;
 }
 
 const FIELDS: Array<keyof UpdateItemBody> = [
@@ -22,6 +23,7 @@ const FIELDS: Array<keyof UpdateItemBody> = [
   'firstname',
   'lastname',
   'editedTranslated',
+  'sheetId',
 ];
 
 export async function handler(

@@ -745,6 +745,7 @@ export default function ProductsPageClient({ catalog, isAdmin }: { catalog: Cata
       formData.append('firstname', newItem.first || '');
       formData.append('lastname', newItem.last || '');
       formData.append('editedtranslated', Array.isArray(newItem.editedtranslated) ? newItem.editedtranslated.join(', ') : (newItem.editedtranslated || ''));
+      formData.append('sheetId', newItem.sheetId || '');
 
       // Import the createProduct action
       const { createProduct } = await import('./actions');

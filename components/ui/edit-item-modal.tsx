@@ -24,6 +24,7 @@ export interface EditableItem {
   first: string;
   last: string;
   editedtranslated: string | string[] | null;
+  sheetId: string;
 }
 
 export function EditItemModal({
@@ -354,6 +355,21 @@ export function EditItemModal({
               />
               {errors.last && <p className="text-red-500 text-xs mt-1">{errors.last}</p>}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              ID
+            </label>
+            <Input
+              type="text"
+              value={formData.sheetId}
+              onChange={(e) => handleInputChange('sheetId', e.target.value)}
+              disabled={isEditing}
+              placeholder="Optional — e.g. 1029 VIV-E 5.1"
+              className={errors.sheetId ? 'border-red-500' : ''}
+            />
+            {errors.sheetId && <p className="text-red-500 text-xs mt-1">{errors.sheetId}</p>}
           </div>
 
           <div>
