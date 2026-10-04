@@ -14,7 +14,6 @@ import {
 import { ChangePasswordModal } from '@/components/ui/change-password-modal';
 import { changePassword } from '@/utils/cognito/client';
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import SignOutButton from '@/components/sign-out-button';
 
 interface CurrentUser {
@@ -74,11 +73,6 @@ export function User() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {isAdmin && (
-            <DropdownMenuItem asChild>
-              <Link href="/admin/users">Manage Users</Link>
-            </DropdownMenuItem>
-          )}
           <DropdownMenuItem onSelect={() => setChangePasswordOpen(true)}>
             Change Password
           </DropdownMenuItem>

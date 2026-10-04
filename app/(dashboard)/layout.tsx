@@ -28,6 +28,7 @@ import { VercelLogo } from '@/components/icons';
 import Providers from './providers';
 import { NavItem } from './nav-item';
 import { MobileNavItem } from './mobile-nav-item';
+import { AdminNavItem } from './admin-nav-item';
 import { SearchInput } from './search';
 import AuthCheck from '@/components/auth-check';
 
@@ -81,6 +82,8 @@ export function DesktopNav() {
           <BookMarked className="h-5 w-5" />
         </NavItem>
 
+        <AdminNavItem variant="desktop" />
+
         <User />
       </nav>
       <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
@@ -119,6 +122,8 @@ export function MobileNav() {
       <MobileNavItem href="/my-checkouts" label="My Checkouts">
         <BookMarked className="h-5 w-5" />
       </MobileNavItem>
+
+      <AdminNavItem variant="mobile" />
 
       <User />
     </nav>
