@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BookOpen } from 'lucide-react';
 import { apiUrl, authedRequestInit } from '@/utils/api-client';
+import { ReturnIcon } from '@/components/icons';
 import type { CatalogItem } from '../page';
 
 function daysAgo(iso: string): number {
@@ -20,21 +21,25 @@ export default function MyCheckoutsPage() {
   const [checkouts, setCheckouts] = useState<CatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [returningId, setReturningId] = useState<string | null>(null);
+
+  const loadCheckouts = useCallback(async () => {
+    const init = await authedRequestInit();
+    const response = await fetch(apiUrl('/catalog'), init);
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body?.error ?? 'Failed to load your checkouts');
+    }
+    const catalog = (body.data ?? []) as CatalogItem[];
+    setCheckouts(catalog.filter((item) => item.checkedOutByCurrentUser));
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
 
     async function load() {
       try {
-        const init = await authedRequestInit();
-        const response = await fetch(apiUrl('/catalog'), init);
-        const body = await response.json();
-        if (!response.ok) {
-          throw new Error(body?.error ?? 'Failed to load your checkouts');
-        }
-        if (!isMounted) return;
-        const catalog = (body.data ?? []) as CatalogItem[];
-        setCheckouts(catalog.filter((item) => item.checkedOutByCurrentUser));
+        await loadCheckouts();
       } catch (err) {
         if (!isMounted) return;
         setError(err instanceof Error ? err.message : 'Failed to load your checkouts');
@@ -47,7 +52,24 @@ export default function MyCheckoutsPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadCheckouts]);
+
+  const handleReturn = async (bookId: string) => {
+    setReturningId(bookId);
+    try {
+      const init = await authedRequestInit({ method: 'POST' });
+      const response = await fetch(apiUrl(`/catalog/${encodeURIComponent(bookId)}/return`), init);
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Failed to return book');
+      }
+      await loadCheckouts();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to return book');
+    } finally {
+      setReturningId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -83,7 +105,8 @@ export default function MyCheckoutsPage() {
       ) : (
         <div className="space-y-3">
           {checkouts.map((item) => {
-            const iso = item.checkoutDetails?.checkedOutAtIso;
+            const details = item.checkoutDetails;
+            const iso = details?.checkedOutAtIso;
             return (
               <Card key={item.id}>
                 <CardContent className="p-4 flex items-start justify-between gap-4">
@@ -92,9 +115,21 @@ export default function MyCheckoutsPage() {
                     <div className="text-sm text-gray-500">
                       {item.category} · {Array.isArray(item.language) ? item.language.join(', ') : item.language}
                     </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {iso ? `Checked out ${formatDaysAgo(daysAgo(iso))}` : '—'}
+                      {details?.lastReminderSentAt && (
+                        <> · last reminder {new Date(details.lastReminderSentAt).toLocaleDateString()}</>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-600 whitespace-nowrap">
-                    {iso ? `Checked out ${formatDaysAgo(daysAgo(iso))}` : '—'}
+                  <div
+                    title="Return this book"
+                    onClick={() => !returningId && handleReturn(item.id)}
+                    className={`p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer shrink-0 ${
+                      returningId === item.id ? 'opacity-50' : 'hover:bg-blue-500'
+                    }`}
+                  >
+                    <ReturnIcon height={16} color="#6b7280" />
                   </div>
                 </CardContent>
               </Card>

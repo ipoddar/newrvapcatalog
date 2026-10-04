@@ -27,6 +27,7 @@ export interface CatalogItem {
     userPhone: string;
     checkedOutDate: string;
     checkedOutAtIso: string;
+    lastReminderSentAt: string | null;
   } | null;
 }
 

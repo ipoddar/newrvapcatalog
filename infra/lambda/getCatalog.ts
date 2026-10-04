@@ -87,6 +87,7 @@ export async function handler(
             userEmail: string;
             userPhone: string;
             checkedOutAt: string;
+            lastReminderSentAt?: string;
           }
         | undefined;
       const derived = derivedById.get(String(book.id));
@@ -103,6 +104,7 @@ export async function handler(
               userPhone: checkout.userPhone,
               checkedOutDate: new Date(checkout.checkedOutAt).toLocaleDateString(),
               checkedOutAtIso: checkout.checkedOutAt,
+              lastReminderSentAt: checkout.lastReminderSentAt ?? null,
             }
           : null,
       };
