@@ -11,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { ChangePasswordModal } from '@/components/ui/change-password-modal';
+import { changePassword } from '@/utils/cognito/client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import SignOutButton from '@/components/sign-out-button';
@@ -23,6 +25,7 @@ interface CurrentUser {
 export function User() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isChangePasswordOpen, setChangePasswordOpen] = useState(false);
 
   useEffect(() => {
     getCurrentUser().then((u) => setUser(u));
@@ -32,53 +35,64 @@ export function User() {
   if (!user) return null;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          className={`overflow-hidden rounded-full relative ${isAdmin ? 'ring-2 ring-green-500' : ''}`}
-        >
-          <div className="w-9 h-9 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium">
-            {user.email?.charAt(0).toUpperCase() || 'U'}
-          </div>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel>
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">My Account</p>
-            <p className="text-xs leading-none text-muted-foreground">
-              {user.email}
-            </p>
-            {user.phoneNumber && (
-              <p className="text-xs leading-none text-muted-foreground">
-                {user.phoneNumber}
-              </p>
-            )}
-            <div className="flex items-center gap-1 mt-1">
-              {isAdmin ? (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                  Admin
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
-                  User
-                </span>
-              )}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            className={`overflow-hidden rounded-full relative ${isAdmin ? 'ring-2 ring-green-500' : ''}`}
+          >
+            <div className="w-9 h-9 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium">
+              {user.email?.charAt(0).toUpperCase() || 'U'}
             </div>
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {isAdmin && (
-          <DropdownMenuItem asChild>
-            <Link href="/admin/users">Manage Users</Link>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>
+            <div className="flex flex-col space-y-1">
+              <p className="text-sm font-medium leading-none">My Account</p>
+              <p className="text-xs leading-none text-muted-foreground">
+                {user.email}
+              </p>
+              {user.phoneNumber && (
+                <p className="text-xs leading-none text-muted-foreground">
+                  {user.phoneNumber}
+                </p>
+              )}
+              <div className="flex items-center gap-1 mt-1">
+                {isAdmin ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    Admin
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
+                    User
+                  </span>
+                )}
+              </div>
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {isAdmin && (
+            <DropdownMenuItem asChild>
+              <Link href="/admin/users">Manage Users</Link>
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => setChangePasswordOpen(true)}>
+            Change Password
           </DropdownMenuItem>
-        )}
-        <DropdownMenuItem asChild>
-          <SignOutButton />
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuItem asChild>
+            <SignOutButton />
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
+        onSave={(current, next) => changePassword(current, next)}
+      />
+    </>
   );
 }

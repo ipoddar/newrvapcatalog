@@ -73,6 +73,30 @@ export function completeNewPasswordChallenge(
   });
 }
 
+export function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+  const user = getCurrentCognitoUser();
+  if (!user) return Promise.reject(new Error('Not signed in'));
+
+  return new Promise((resolve, reject) => {
+    // changePassword requires an authenticated session on the CognitoUser
+    // instance (getSession() populates it as a side effect) — calling it
+    // on a freshly-constructed CognitoUser without this fails silently.
+    user.getSession((err: Error | null) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      user.changePassword(oldPassword, newPassword, (err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+    });
+  });
+}
+
 export function signOut(): void {
   getCurrentCognitoUser()?.signOut();
 }

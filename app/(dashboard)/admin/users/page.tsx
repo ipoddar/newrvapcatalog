@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/table';
 import { AddUserModal, NewUser } from '@/components/ui/add-user-modal';
 import { AdminCheckoutModal, AvailableBook } from '@/components/ui/admin-checkout-modal';
-import { PlusCircle } from 'lucide-react';
+import { SetPasswordModal } from '@/components/ui/set-password-modal';
+import { PlusCircle, KeyRound } from 'lucide-react';
 import { ReturnIcon, CheckoutIcon } from '@/components/icons';
 
 interface CheckedOutBook {
@@ -52,6 +53,10 @@ export default function AdminUsersPage() {
   const [checkoutForUser, setCheckoutForUser] = useState<AdminUser | null>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [returningBookId, setReturningBookId] = useState<string | null>(null);
+
+  const [passwordForUser, setPasswordForUser] = useState<AdminUser | null>(null);
+  const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const [setPasswordError, setSetPasswordError] = useState('');
 
   const loadUsers = useCallback(async () => {
     const init = await authedRequestInit();
@@ -127,6 +132,7 @@ export default function AdminUsersPage() {
           email: newUser.email.trim(),
           firstName: newUser.firstName.trim(),
           lastName: newUser.lastName.trim(),
+          password: newUser.password,
           isAdmin: newUser.isAdmin,
         }),
       });
@@ -137,6 +143,28 @@ export default function AdminUsersPage() {
       setAddUserError(err instanceof Error ? err.message : 'Failed to create user');
     } finally {
       setIsAddingUser(false);
+    }
+  };
+
+  const handleSetPassword = async (password: string) => {
+    if (!passwordForUser) return;
+    setIsSettingPassword(true);
+    setSetPasswordError('');
+    try {
+      const init = await authedRequestInit({
+        method: 'PUT',
+        body: JSON.stringify({ password }),
+      });
+      await fetchWithColdStartHint(
+        apiUrl(`/admin/users/${encodeURIComponent(passwordForUser.email)}/password`),
+        init,
+        () => {}
+      );
+      setPasswordForUser(null);
+    } catch (err) {
+      setSetPasswordError(err instanceof Error ? err.message : 'Failed to set password');
+    } finally {
+      setIsSettingPassword(false);
     }
   };
 
@@ -264,15 +292,26 @@ export default function AdminUsersPage() {
                   )}
                 </TableCell>
                 <TableCell className="px-4 py-3 text-sm">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-1"
-                    onClick={() => setCheckoutForUser(user)}
-                  >
-                    <CheckoutIcon height={14} />
-                    Check Out
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-1"
+                      onClick={() => setCheckoutForUser(user)}
+                    >
+                      <CheckoutIcon height={14} />
+                      Check Out
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-1"
+                      onClick={() => setPasswordForUser(user)}
+                    >
+                      <KeyRound className="h-3.5 w-3.5" />
+                      Reset Password
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -302,6 +341,22 @@ export default function AdminUsersPage() {
           userName={checkoutForUser.name || checkoutForUser.email}
           isSaving={isCheckingOut}
         />
+      )}
+
+      {passwordForUser && (
+        <SetPasswordModal
+          isOpen={true}
+          onClose={() => {
+            setPasswordForUser(null);
+            setSetPasswordError('');
+          }}
+          onSave={handleSetPassword}
+          userName={passwordForUser.name || passwordForUser.email}
+          isSaving={isSettingPassword}
+        />
+      )}
+      {setPasswordError && (
+        <p className="text-sm text-red-600 mt-2">{setPasswordError}</p>
       )}
     </div>
   );

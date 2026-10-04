@@ -1,54 +1,24 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
-import { randomBytes } from 'crypto';
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
+  AdminSetUserPasswordCommand,
   UsernameExistsException,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { requireAdmin, HttpError } from './lib/auth';
 import { handle, json } from './lib/http';
 import { sendEmail } from './lib/email';
+import { buildCredentialsEmail } from './lib/welcomeEmail';
 
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.USER_POOL_ID!;
-const SITE_URL = process.env.SITE_URL!;
 
 interface CreateUserBody {
   email: string;
   firstName: string;
   lastName: string;
+  password: string;
   isAdmin?: boolean;
-}
-
-// Cognito's temporary-password policy mirrors the pool's password policy
-// (min length 6, no character-class requirements — see cognito-stack.ts),
-// but a longer random value is used here regardless since it's never
-// typed by a human, only pasted from the welcome email.
-function generateTemporaryPassword(): string {
-  return randomBytes(12).toString('base64url');
-}
-
-function buildWelcomeEmail(name: string, email: string, tempPassword: string): string {
-  return `Hi ${name},
-
-An administrator has created a library catalog account for you at the Ramakrishna Vedanta Ashrama of Pittsburgh.
-
-Sign in here: ${SITE_URL}/login
-Email: ${email}
-Temporary password: ${tempPassword}
-
-You'll be asked to choose your own password the first time you sign in.
-
-About the catalog: it holds books on Sri Ramakrishna, Holy Mother, and Swami Vivekananda's lives and teachings, Vedanta philosophy, sacred texts, devotional music and prayers, and more — spanning English, Sanskrit, Hindi, Bengali, and Tamil.
-
-Checking out and returning books:
-- Find a book and click the checkout icon on its row to borrow it.
-- Click the same icon again (it becomes a return icon) when you're ready to return it.
-- A row highlighted in yellow means it's already checked out.
-
-Please note: the library sends automated email reminders if a book you've checked out hasn't been returned after a while. By confirming this account and signing in, you're agreeing to receive these reminder emails.
-
-— Ramakrishna Vedanta Ashrama of Pittsburgh`;
 }
 
 export async function handler(
@@ -67,10 +37,12 @@ export async function handler(
     if (!body.firstName?.trim() || !body.lastName?.trim()) {
       throw new HttpError(400, 'First and last name are required');
     }
+    if (!body.password || body.password.length < 6) {
+      throw new HttpError(400, 'Password must be at least 6 characters');
+    }
 
     const email = body.email.trim();
     const name = `${body.firstName.trim()} ${body.lastName.trim()}`;
-    const tempPassword = generateTemporaryPassword();
 
     try {
       await cognito.send(
@@ -78,7 +50,6 @@ export async function handler(
           UserPoolId: USER_POOL_ID,
           Username: email,
           MessageAction: 'SUPPRESS',
-          TemporaryPassword: tempPassword,
           UserAttributes: [
             { Name: 'email', Value: email },
             { Name: 'email_verified', Value: 'true' },
@@ -94,10 +65,22 @@ export async function handler(
       throw err;
     }
 
+    // Permanent: true makes the admin-chosen password immediately usable,
+    // skipping Cognito's FORCE_CHANGE_PASSWORD challenge — the user can
+    // change it later of their own accord via the account menu instead.
+    await cognito.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: USER_POOL_ID,
+        Username: email,
+        Password: body.password,
+        Permanent: true,
+      })
+    );
+
     await sendEmail(
       email,
       'Welcome to the RVAP Library Catalog',
-      buildWelcomeEmail(name, email, tempPassword)
+      buildCredentialsEmail({ name, email, password: body.password, isNewAccount: true })
     );
 
     return json(201, { success: true, data: { email, name } });

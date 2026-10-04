@@ -63,6 +63,7 @@ export class ApiStack extends cdk.Stack {
     const deleteItemFn = makeFunction('DeleteItemFn', 'deleteItem.ts');
     const getUsersFn = makeFunction('GetUsersFn', 'getUsers.ts');
     const adminCreateUserFn = makeFunction('AdminCreateUserFn', 'adminCreateUser.ts');
+    const adminSetPasswordFn = makeFunction('AdminSetPasswordFn', 'adminSetPassword.ts');
 
     // Not API-routed — invoked only by the daily EventBridge schedule below.
     const sendOverdueRemindersFn = makeFunction(
@@ -106,16 +107,26 @@ export class ApiStack extends cdk.Stack {
     // email/name/phone via a ListUsers filter (see checkoutBook.ts).
     checkoutBookFn.addToRolePolicy(listUsersPolicy);
 
-    // Admin user creation: provisions a Cognito user with a randomly
-    // generated temporary password (leaving it in FORCE_CHANGE_PASSWORD
-    // status) and emails the new user their welcome message + credentials.
+    // Admin user creation: provisions a Cognito user with an
+    // admin-specified permanent password and emails the new user their
+    // welcome message + credentials.
     adminCreateUserFn.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ['cognito-idp:AdminCreateUser'],
+        actions: ['cognito-idp:AdminCreateUser', 'cognito-idp:AdminSetUserPassword'],
         resources: [userPool.userPoolArn],
       })
     );
     adminCreateUserFn.addToRolePolicy(sesSendPolicy);
+
+    // Admin password reset: sets an admin-specified permanent password on
+    // an existing user and emails them the new credentials.
+    adminSetPasswordFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cognito-idp:AdminSetUserPassword', 'cognito-idp:AdminGetUser'],
+        resources: [userPool.userPoolArn],
+      })
+    );
+    adminSetPasswordFn.addToRolePolicy(sesSendPolicy);
 
     // Overdue reminders: reads/writes Checkouts (to stamp lastReminderSentAt),
     // reads Catalog for titles, and sends via SES.
@@ -196,6 +207,11 @@ export class ApiStack extends cdk.Stack {
     );
     authorizedRoute('/admin/users', [apigatewayv2.HttpMethod.GET], getUsersFn);
     authorizedRoute('/admin/users', [apigatewayv2.HttpMethod.POST], adminCreateUserFn);
+    authorizedRoute(
+      '/admin/users/{email}/password',
+      [apigatewayv2.HttpMethod.PUT],
+      adminSetPasswordFn
+    );
 
     this.apiUrl = httpApi.apiEndpoint;
     new cdk.CfnOutput(this, 'ApiUrl', { value: httpApi.apiEndpoint });
