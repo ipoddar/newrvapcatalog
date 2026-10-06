@@ -17,8 +17,14 @@ import {
 import { AddUserModal, NewUser } from '@/components/ui/add-user-modal';
 import { AdminCheckoutModal, AvailableBook } from '@/components/ui/admin-checkout-modal';
 import { SetPasswordModal } from '@/components/ui/set-password-modal';
-import { PlusCircle, KeyRound, BellRing } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/confirm-delete-modal';
+import { PlusCircle, KeyRound, BellRing, Ban, UserCheck, Trash2 } from 'lucide-react';
 import { ReturnIcon, CheckoutIcon } from '@/components/icons';
+
+// Mirrors the server-side floor in infra/lambda/setUserEnabled.ts /
+// deleteUser.ts — kept here only so the button can be disabled proactively
+// in the UI; the actual enforcement is server-side.
+const PROTECTED_EMAIL = 'ipoddar@hotmail.com';
 
 interface CheckedOutBook {
   bookId: string;
@@ -35,6 +41,7 @@ interface AdminUser {
   name: string;
   isAdmin: string;
   status: string;
+  enabled: boolean;
   createdAt: string;
   checkedOutBooks: CheckedOutBook[];
 }
@@ -59,6 +66,13 @@ export default function AdminUsersPage() {
   const [passwordForUser, setPasswordForUser] = useState<AdminUser | null>(null);
   const [isSettingPassword, setIsSettingPassword] = useState(false);
   const [setPasswordError, setSetPasswordError] = useState('');
+
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState('');
+
+  const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [deleteUserError, setDeleteUserError] = useState('');
 
   const loadUsers = useCallback(async () => {
     const init = await authedRequestInit();
@@ -167,6 +181,53 @@ export default function AdminUsersPage() {
       setSetPasswordError(err instanceof Error ? err.message : 'Failed to set password');
     } finally {
       setIsSettingPassword(false);
+    }
+  };
+
+  const handleToggleEnabled = async (user: AdminUser) => {
+    setTogglingUserId(user.userId);
+    setToggleError('');
+    try {
+      const init = await authedRequestInit({
+        method: 'PUT',
+        body: JSON.stringify({ enabled: !user.enabled }),
+      });
+      const response = await fetch(
+        apiUrl(`/admin/users/${encodeURIComponent(user.email)}/enabled`),
+        init
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Failed to update user');
+      }
+      await loadUsers();
+    } catch (err) {
+      setToggleError(err instanceof Error ? err.message : 'Failed to update user');
+    } finally {
+      setTogglingUserId(null);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
+    setDeleteUserError('');
+    try {
+      const init = await authedRequestInit({ method: 'DELETE' });
+      const response = await fetch(
+        apiUrl(`/admin/users/${encodeURIComponent(userToDelete.email)}`),
+        init
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Failed to delete user');
+      }
+      setUserToDelete(null);
+      await loadUsers();
+    } catch (err) {
+      setDeleteUserError(err instanceof Error ? err.message : 'Failed to delete user');
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -279,7 +340,13 @@ export default function AdminUsersPage() {
                     <Badge variant="secondary">User</Badge>
                   )}
                 </TableCell>
-                <TableCell className="px-4 py-3 text-sm text-gray-600">{user.status}</TableCell>
+                <TableCell className="px-4 py-3 text-sm">
+                  {user.enabled ? (
+                    <Badge variant="secondary">{user.status}</Badge>
+                  ) : (
+                    <Badge variant="destructive">Disabled</Badge>
+                  )}
+                </TableCell>
                 <TableCell className="px-4 py-3 text-sm">
                   {user.checkedOutBooks.length === 0 ? (
                     <span className="text-gray-400">None</span>
@@ -329,7 +396,7 @@ export default function AdminUsersPage() {
                   )}
                 </TableCell>
                 <TableCell className="px-4 py-3 text-sm">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
@@ -348,6 +415,40 @@ export default function AdminUsersPage() {
                       <KeyRound className="h-3.5 w-3.5" />
                       Reset Password
                     </Button>
+                    {user.email.toLowerCase() !== PROTECTED_EMAIL && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-1"
+                        disabled={togglingUserId === user.userId}
+                        onClick={() => handleToggleEnabled(user)}
+                      >
+                        {user.enabled ? (
+                          <>
+                            <Ban className="h-3.5 w-3.5" />
+                            Disable
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="h-3.5 w-3.5" />
+                            Enable
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {user.email.toLowerCase() !== PROTECTED_EMAIL &&
+                      user.isAdmin !== 'true' &&
+                      user.checkedOutBooks.length === 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-1 text-red-600 hover:text-red-700"
+                          onClick={() => setUserToDelete(user)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </Button>
+                      )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -355,6 +456,9 @@ export default function AdminUsersPage() {
           </TableBody>
         </Table>
       </div>
+      {toggleError && (
+        <p className="text-sm text-red-600 mt-2">{toggleError}</p>
+      )}
 
       <AddUserModal
         isOpen={isAddUserOpen}
@@ -394,6 +498,23 @@ export default function AdminUsersPage() {
       )}
       {setPasswordError && (
         <p className="text-sm text-red-600 mt-2">{setPasswordError}</p>
+      )}
+
+      {userToDelete && (
+        <ConfirmDeleteModal
+          isOpen={true}
+          onClose={() => {
+            setUserToDelete(null);
+            setDeleteUserError('');
+          }}
+          onConfirm={handleDeleteUser}
+          title="Delete User"
+          itemName={userToDelete.name || userToDelete.email}
+          isDeleting={isDeletingUser}
+        />
+      )}
+      {deleteUserError && (
+        <p className="text-sm text-red-600 mt-2">{deleteUserError}</p>
       )}
     </div>
   );

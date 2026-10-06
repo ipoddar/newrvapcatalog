@@ -9,8 +9,18 @@ import { handle, json, warm } from './lib/http';
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.USER_POOL_ID!;
 
+interface CognitoUserSummary {
+  userId: string;
+  email: string;
+  name: string;
+  isAdmin: string;
+  status: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
 async function listAllUsers() {
-  const users: Record<string, string>[] = [];
+  const users: CognitoUserSummary[] = [];
   let PaginationToken: string | undefined;
   do {
     const page = await cognito.send(
@@ -26,6 +36,7 @@ async function listAllUsers() {
         name: attrs.name ?? '',
         isAdmin: attrs['custom:admin'] === 'true' ? 'true' : 'false',
         status: user.UserStatus ?? '',
+        enabled: user.Enabled !== false,
         createdAt: user.UserCreateDate ? new Date(user.UserCreateDate).toISOString() : '',
       });
     }

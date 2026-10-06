@@ -72,6 +72,8 @@ export class ApiStack extends cdk.Stack {
     const requestBookFn = makeFunction('RequestBookFn', 'requestBook.ts');
     const notifyHolderFn = makeFunction('NotifyHolderFn', 'notifyHolder.ts');
     const getBookHistoryFn = makeFunction('GetBookHistoryFn', 'getBookHistory.ts');
+    const setUserEnabledFn = makeFunction('SetUserEnabledFn', 'setUserEnabled.ts');
+    const deleteUserFn = makeFunction('DeleteUserFn', 'deleteUser.ts');
 
     // Not API-routed — invoked only by the daily EventBridge schedule below.
     const sendOverdueRemindersFn = makeFunction(
@@ -105,8 +107,16 @@ export class ApiStack extends cdk.Stack {
       actions: ['ses:SendEmail', 'ses:SendRawEmail'],
       resources: ['*'],
     });
+    // lib/email.ts checks the recipient's Cognito Enabled flag before every
+    // send, so every Lambda that calls sendEmail() needs this too.
+    const adminGetUserPolicy = new iam.PolicyStatement({
+      actions: ['cognito-idp:AdminGetUser'],
+      resources: [userPool.userPoolArn],
+    });
     checkoutBookFn.addToRolePolicy(sesSendPolicy);
+    checkoutBookFn.addToRolePolicy(adminGetUserPolicy);
     returnBookFn.addToRolePolicy(sesSendPolicy);
+    returnBookFn.addToRolePolicy(adminGetUserPolicy);
 
     // Request/notify-holder: a user requesting a book reads Checkouts (is
     // it actually out?) and writes BookRequests; an admin forwarding a
@@ -119,6 +129,7 @@ export class ApiStack extends cdk.Stack {
     catalogTable.grantReadData(notifyHolderFn);
     historyTable.grantWriteData(notifyHolderFn);
     notifyHolderFn.addToRolePolicy(sesSendPolicy);
+    notifyHolderFn.addToRolePolicy(adminGetUserPolicy);
 
     // Admin history view: read-only access to a single book's event log.
     historyTable.grantReadData(getBookHistoryFn);
@@ -148,6 +159,7 @@ export class ApiStack extends cdk.Stack {
       })
     );
     adminCreateUserFn.addToRolePolicy(sesSendPolicy);
+    adminCreateUserFn.addToRolePolicy(adminGetUserPolicy);
 
     // Admin password reset: sets an admin-specified permanent password on
     // an existing user and emails them the new credentials.
@@ -159,12 +171,36 @@ export class ApiStack extends cdk.Stack {
     );
     adminSetPasswordFn.addToRolePolicy(sesSendPolicy);
 
+    // Admin enable/disable: flips the Cognito Enabled flag, which both
+    // blocks sign-in (Cognito rejects auth for a disabled user) and —
+    // via lib/email.ts's AdminGetUser check — stops any further emails.
+    setUserEnabledFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cognito-idp:AdminGetUser', 'cognito-idp:AdminEnableUser', 'cognito-idp:AdminDisableUser'],
+        resources: [userPool.userPoolArn],
+      })
+    );
+
+    // Admin user deletion: only allowed with zero checked-out books (see
+    // deleteUser.ts) and never for an admin account or the protected
+    // email — reads Checkouts to verify, cleans up any pending
+    // BookRequests rows, then deletes the Cognito user.
+    checkoutsTable.grantReadData(deleteUserFn);
+    bookRequestsTable.grantReadWriteData(deleteUserFn);
+    deleteUserFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cognito-idp:AdminGetUser', 'cognito-idp:AdminDeleteUser'],
+        resources: [userPool.userPoolArn],
+      })
+    );
+
     // Overdue reminders: reads/writes Checkouts (to stamp lastReminderSentAt),
     // reads Catalog for titles, and sends via SES.
     checkoutsTable.grantReadWriteData(sendOverdueRemindersFn);
     catalogTable.grantReadData(sendOverdueRemindersFn);
     historyTable.grantWriteData(sendOverdueRemindersFn);
     sendOverdueRemindersFn.addToRolePolicy(sesSendPolicy);
+    sendOverdueRemindersFn.addToRolePolicy(adminGetUserPolicy);
 
     // Check once a day for checkouts crossing the 3-month-since-checkout or
     // 6-month-since-last-reminder threshold (see sendOverdueReminders.ts).
@@ -180,6 +216,7 @@ export class ApiStack extends cdk.Stack {
     bookRequestsTable.grantReadWriteData(expireHoldsFn);
     historyTable.grantWriteData(expireHoldsFn);
     expireHoldsFn.addToRolePolicy(sesSendPolicy);
+    expireHoldsFn.addToRolePolicy(adminGetUserPolicy);
     new events.Rule(this, 'ExpireHoldsScheduleRule', {
       schedule: events.Schedule.rate(cdk.Duration.days(1)),
       targets: [new targets.LambdaFunction(expireHoldsFn)],
@@ -281,6 +318,16 @@ export class ApiStack extends cdk.Stack {
       '/admin/users/{email}/password',
       [apigatewayv2.HttpMethod.PUT],
       adminSetPasswordFn
+    );
+    authorizedRoute(
+      '/admin/users/{email}/enabled',
+      [apigatewayv2.HttpMethod.PUT],
+      setUserEnabledFn
+    );
+    authorizedRoute(
+      '/admin/users/{email}',
+      [apigatewayv2.HttpMethod.DELETE],
+      deleteUserFn
     );
 
     this.apiUrl = httpApi.apiEndpoint;
