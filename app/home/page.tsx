@@ -228,13 +228,14 @@ export default function HomePage() {
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               {languages.map((lang) => (
-                <div 
+                <Link
                   key={lang.code}
-                  className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border hover:shadow-md transition-shadow text-center"
+                  href={`/?tabs=${lang.code}`}
+                  className="block p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border hover:shadow-md transition-shadow text-center"
                 >
                   <div className="font-bold text-gray-900">{lang.code}</div>
                   <div className="text-sm text-gray-600">{lang.name}</div>
-                </div>
+                </Link>
               ))}
             </div>
           </CardContent>
