@@ -107,7 +107,7 @@ export async function handler(
         ...book,
         ...derived,
         isCheckedOut: Boolean(checkout),
-        checkedOutByCurrentUser: checkout?.userId === sub,
+        checkedOutByCurrentUser: Boolean(sub) && checkout?.userId === sub,
         requestedByCurrentUser: requestedBookIdsByUser.has(String(book.id)),
         heldForCurrentUser: holdActive && holdForUserId === sub,
         isOnHoldForOther: holdActive && holdForUserId !== sub,
