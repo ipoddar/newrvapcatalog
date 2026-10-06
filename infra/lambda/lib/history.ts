@@ -7,7 +7,8 @@ export type HistoryEventType =
   | 'returned'
   | 'requested'
   | 'hold_granted'
-  | 'hold_expired';
+  | 'hold_expired'
+  | 'email_sent';
 
 interface RecordHistoryEventInput {
   bookId: string;
@@ -15,6 +16,7 @@ interface RecordHistoryEventInput {
   userId?: string;
   userName?: string;
   userEmail?: string;
+  emailSubject?: string;
 }
 
 // Best-effort, non-throwing — same philosophy as lib/email.ts: a
@@ -27,6 +29,7 @@ export async function recordHistoryEvent({
   userId,
   userName,
   userEmail,
+  emailSubject,
 }: RecordHistoryEventInput): Promise<void> {
   try {
     await ddb.send(
@@ -39,12 +42,32 @@ export async function recordHistoryEvent({
           userId: userId ?? null,
           userName: userName ?? '',
           userEmail: userEmail ?? '',
+          emailSubject: emailSubject ?? null,
         },
       })
     );
   } catch (err) {
     console.error('Failed to record history event', err);
   }
+}
+
+// Wraps sendEmail with a history write so the book's "Emails sent" log
+// stays accurate without every call site having to remember both calls —
+// recipient is logged as userEmail/userName so it renders the same way as
+// every other history event.
+export async function recordEmailSent(
+  bookId: string,
+  recipientEmail: string,
+  recipientName: string,
+  subject: string
+): Promise<void> {
+  await recordHistoryEvent({
+    bookId,
+    eventType: 'email_sent',
+    userEmail: recipientEmail,
+    userName: recipientName,
+    emailSubject: subject,
+  });
 }
 
 export async function getBookHistory(bookId: string) {

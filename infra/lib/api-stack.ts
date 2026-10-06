@@ -117,6 +117,7 @@ export class ApiStack extends cdk.Stack {
     historyTable.grantWriteData(requestBookFn);
     checkoutsTable.grantReadData(notifyHolderFn);
     catalogTable.grantReadData(notifyHolderFn);
+    historyTable.grantWriteData(notifyHolderFn);
     notifyHolderFn.addToRolePolicy(sesSendPolicy);
 
     // Admin history view: read-only access to a single book's event log.
@@ -162,6 +163,7 @@ export class ApiStack extends cdk.Stack {
     // reads Catalog for titles, and sends via SES.
     checkoutsTable.grantReadWriteData(sendOverdueRemindersFn);
     catalogTable.grantReadData(sendOverdueRemindersFn);
+    historyTable.grantWriteData(sendOverdueRemindersFn);
     sendOverdueRemindersFn.addToRolePolicy(sesSendPolicy);
 
     // Check once a day for checkouts crossing the 3-month-since-checkout or

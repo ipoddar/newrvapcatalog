@@ -1,7 +1,7 @@
 import { QueryCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, CATALOG_TABLE, BOOK_REQUESTS_TABLE } from './dynamo';
 import { sendEmail } from './email';
-import { recordHistoryEvent } from './history';
+import { recordHistoryEvent, recordEmailSent } from './history';
 
 const HOLD_DURATION_MS = 48 * 60 * 60 * 1000;
 
@@ -62,10 +62,11 @@ export async function promoteNextRequester(bookId: string, title: string): Promi
     ),
   ]);
 
+  const availableSubject = `"${title}" is available — RVAP Library Catalog`;
   await Promise.all([
     sendEmail(
       next.requesterEmail,
-      `"${title}" is available — RVAP Library Catalog`,
+      availableSubject,
       `Hi ${next.requesterName || 'there'},\n\nGood news — "${title}" has been returned and is now reserved for you.\n\nPlease check it out within 48 hours, or the hold will expire and the book will become available to others.\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
     ),
     recordHistoryEvent({
@@ -75,5 +76,6 @@ export async function promoteNextRequester(bookId: string, title: string): Promi
       userName: next.requesterName,
       userEmail: next.requesterEmail,
     }),
+    recordEmailSent(bookId, next.requesterEmail, next.requesterName, availableSubject),
   ]);
 }

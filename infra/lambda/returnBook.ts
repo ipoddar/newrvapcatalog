@@ -7,19 +7,23 @@ import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
 import { sendEmail } from './lib/email';
 import { promoteNextRequester } from './lib/bookRequests';
-import { recordHistoryEvent } from './lib/history';
+import { recordHistoryEvent, recordEmailSent } from './lib/history';
 
-async function sendReturnConfirmation(bookId: string, userEmail: string): Promise<string> {
+async function sendReturnConfirmation(bookId: string, userEmail: string, userName: string): Promise<string> {
   const book = await ddb.send(
     new GetCommand({ TableName: CATALOG_TABLE, Key: { id: bookId } })
   );
   const title = (book.Item?.title as string) ?? 'this book';
+  const subject = 'Return confirmation — RVAP Library Catalog';
 
-  await sendEmail(
-    userEmail,
-    'Return confirmation — RVAP Library Catalog',
-    `You have returned "${title}". Thank you!\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
-  );
+  await Promise.all([
+    sendEmail(
+      userEmail,
+      subject,
+      `You have returned "${title}". Thank you!\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
+    ),
+    recordEmailSent(bookId, userEmail, userName, subject),
+  ]);
 
   return title;
 }
@@ -54,7 +58,7 @@ export async function handler(
       const returnedUserId = (existing.Item.userId as string) ?? '';
       const returnedUserName = (existing.Item.userName as string) ?? '';
       const userEmail = (existing.Item.userEmail as string) ?? '';
-      const title = await sendReturnConfirmation(bookId, userEmail);
+      const title = await sendReturnConfirmation(bookId, userEmail, returnedUserName);
       await Promise.all([
         promoteNextRequester(bookId, title),
         recordHistoryEvent({
@@ -85,14 +89,15 @@ export async function handler(
     }
 
     const userEmail = (claims.email as string) ?? '';
-    const title = await sendReturnConfirmation(bookId, userEmail);
+    const userName = (claims.name as string) ?? '';
+    const title = await sendReturnConfirmation(bookId, userEmail, userName);
     await Promise.all([
       promoteNextRequester(bookId, title),
       recordHistoryEvent({
         bookId,
         eventType: 'returned',
         userId: sub,
-        userName: (claims.name as string) ?? '',
+        userName,
         userEmail,
       }),
     ]);

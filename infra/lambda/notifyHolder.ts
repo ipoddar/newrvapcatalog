@@ -4,6 +4,7 @@ import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE } from './lib/dynamo';
 import { requireAdmin, HttpError } from './lib/auth';
 import { handle, json } from './lib/http';
 import { sendEmail } from './lib/email';
+import { recordEmailSent } from './lib/history';
 
 export async function handler(
   event: APIGatewayProxyEventV2WithJWTAuthorizer
@@ -26,16 +27,21 @@ export async function handler(
     }
 
     const holderEmail = (checkout.Item.userEmail as string) ?? '';
+    const holderName = (checkout.Item.userName as string) ?? '';
     const title = (book.Item?.title as string) ?? 'this book';
+    const subject = 'Another member is waiting for a book you have — RVAP Library Catalog';
 
     // Deliberately doesn't name the requester — nudges the holder without
     // exposing who's waiting, matching the admin-mediated-forward design
     // (requester identity stays visible to admins only).
-    await sendEmail(
-      holderEmail,
-      'Another member is waiting for a book you have — RVAP Library Catalog',
-      `Hi,\n\nAnother library member has asked about "${title}", which you currently have checked out.\n\nIf you're finished with it, please return it when you can so they can borrow it.\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
-    );
+    await Promise.all([
+      sendEmail(
+        holderEmail,
+        subject,
+        `Hi,\n\nAnother library member has asked about "${title}", which you currently have checked out.\n\nIf you're finished with it, please return it when you can so they can borrow it.\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
+      ),
+      recordEmailSent(bookId, holderEmail, holderName, subject),
+    ]);
 
     return json(200, { success: true });
   });

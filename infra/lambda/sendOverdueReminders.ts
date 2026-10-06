@@ -1,6 +1,7 @@
 import { ScanCommand, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE } from './lib/dynamo';
 import { sendEmail } from './lib/email';
+import { recordEmailSent } from './lib/history';
 
 const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
 const SIX_MONTHS_MS = 180 * 24 * 60 * 60 * 1000;
@@ -48,12 +49,17 @@ export async function handler(): Promise<void> {
     );
     const title = (book.Item?.title as string) ?? 'this book';
     const checkedOutDate = new Date(checkedOutAt).toLocaleDateString();
+    const userName = String(checkout.userName ?? '');
+    const subject = 'Reminder: overdue book — RVAP Library Catalog';
 
-    await sendEmail(
-      userEmail,
-      'Reminder: overdue book — RVAP Library Catalog',
-      `This is a reminder that you checked out "${title}" on ${checkedOutDate} and it has not yet been returned.\n\nPlease return it at your earliest convenience so others can borrow it.\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
-    );
+    await Promise.all([
+      sendEmail(
+        userEmail,
+        subject,
+        `This is a reminder that you checked out "${title}" on ${checkedOutDate} and it has not yet been returned.\n\nPlease return it at your earliest convenience so others can borrow it.\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
+      ),
+      recordEmailSent(bookId, userEmail, userName, subject),
+    ]);
 
     await ddb.send(
       new UpdateCommand({
