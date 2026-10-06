@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Modal } from "./modal";
 import { Button } from "./button";
 import { Input } from "./input";
@@ -132,7 +133,11 @@ export function LoginGateModal({ isOpen, onClose, onSuccess }: LoginGateModalPro
           <>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Sign in to continue</h3>
             <p className="text-sm text-gray-500 mb-4">
-              You need an account to do this. Not registered yet? See the sign-in page for how to request access.
+              You need an account to do this. Not registered yet? Visit the{' '}
+              <Link href="/login" className="text-blue-600 hover:underline">
+                sign-in page
+              </Link>{' '}
+              for how to request access.
             </p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>

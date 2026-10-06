@@ -29,6 +29,7 @@ import Providers from './providers';
 import { NavItem } from './nav-item';
 import { MobileNavItem } from './mobile-nav-item';
 import { AdminNavItem } from './admin-nav-item';
+import { SignInNavItem } from './sign-in-nav-item';
 import { SearchInput } from './search';
 
 export default function DashboardLayout({
@@ -80,6 +81,7 @@ export function DesktopNav() {
         </NavItem>
 
         <AdminNavItem variant="desktop" />
+        <SignInNavItem variant="desktop" />
 
         <User />
       </nav>
@@ -121,6 +123,7 @@ export function MobileNav() {
       </MobileNavItem>
 
       <AdminNavItem variant="mobile" />
+      <SignInNavItem variant="mobile" />
 
       <User />
     </nav>
