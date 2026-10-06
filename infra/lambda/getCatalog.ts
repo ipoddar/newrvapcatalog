@@ -1,4 +1,4 @@
-import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
+import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE, BOOK_REQUESTS_TABLE, COUNTER_ID } from './lib/dynamo';
 import { optionalAuth } from './lib/auth';
@@ -19,14 +19,14 @@ async function scanAll(tableName: string) {
 }
 
 export async function handler(
-  event: APIGatewayProxyEventV2WithJWTAuthorizer
+  event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyStructuredResultV2> {
   if (isWarmerPing(event)) {
     return warm();
   }
 
   return handle(async () => {
-    const { sub, claims } = optionalAuth(event);
+    const { sub, claims } = await optionalAuth(event);
     const isAdmin = claims['custom:admin'] === 'true';
 
     const [catalogItems, checkoutItems, requestItems] = await Promise.all([
@@ -103,19 +103,22 @@ export async function handler(
       const holdExpiresAt = book.holdExpiresAt as string | undefined;
       const holdActive = Boolean(holdForUserId && holdExpiresAt && Date.parse(holdExpiresAt) > Date.now());
 
+      const checkedOutByCurrentUser = Boolean(sub) && checkout?.userId === sub;
+      // Who has a book is private: only an admin coordinating a return, or
+      // the holder looking at their own checkout, gets the name/email/phone.
+      // Everyone else — other members or anonymous visitors — only learns
+      // that it's unavailable, never from whom.
+      const canSeeHolderIdentity = isAdmin || checkedOutByCurrentUser;
+
       return {
         ...book,
         ...derived,
         isCheckedOut: Boolean(checkout),
-        checkedOutByCurrentUser: Boolean(sub) && checkout?.userId === sub,
+        checkedOutByCurrentUser,
         requestedByCurrentUser: requestedBookIdsByUser.has(String(book.id)),
         heldForCurrentUser: holdActive && holdForUserId === sub,
         isOnHoldForOther: holdActive && holdForUserId !== sub,
-        // Email/phone are only meaningful for an admin coordinating a
-        // return — now that this route has no authorizer (public
-        // browsing), redact them for anyone else so a holder's contact
-        // info isn't exposed to anonymous visitors or other members.
-        checkoutDetails: checkout
+        checkoutDetails: checkout && canSeeHolderIdentity
           ? {
               userDisplay: checkout.userName,
               userEmail: isAdmin ? checkout.userEmail : '',

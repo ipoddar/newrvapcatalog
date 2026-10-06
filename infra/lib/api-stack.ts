@@ -38,6 +38,7 @@ export class ApiStack extends cdk.Stack {
       BOOK_REQUESTS_TABLE_NAME: bookRequestsTable.tableName,
       SES_FROM_ADDRESS: sesFromAddress,
       USER_POOL_ID: userPool.userPoolId,
+      USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
       SITE_URL: siteUrl,
     };
 
