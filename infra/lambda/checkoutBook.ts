@@ -7,6 +7,7 @@ import { requireAuth, HttpError } from './lib/auth';
 import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
 import { sendEmail } from './lib/email';
+import { recordHistoryEvent } from './lib/history';
 
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.USER_POOL_ID!;
@@ -113,11 +114,20 @@ export async function handler(
       );
     }
 
-    await sendEmail(
-      userEmail,
-      'Checkout confirmation — RVAP Library Catalog',
-      `You have checked out "${title}".\n\nPlease return it when you are done so others can borrow it.\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
-    );
+    await Promise.all([
+      sendEmail(
+        userEmail,
+        'Checkout confirmation — RVAP Library Catalog',
+        `You have checked out "${title}".\n\nPlease return it when you are done so others can borrow it.\n\n— Ramakrishna Vedanta Ashrama of Pittsburgh`
+      ),
+      recordHistoryEvent({
+        bookId,
+        eventType: 'checked_out',
+        userId: checkoutUserId,
+        userName,
+        userEmail,
+      }),
+    ]);
 
     return json(200, { success: true });
   });

@@ -171,3 +171,13 @@ export async function notifyHolder(
   if (!bookId) return { success: false, error: 'Book ID is required' };
   return adminRequest(`/catalog/${encodeURIComponent(bookId)}/notify-holder`, 'POST', {}, onSlow);
 }
+
+export async function getBookHistory(bookId: string): Promise<ActionResult> {
+  const init = await authedRequestInit();
+  const response = await fetch(apiUrl(`/catalog/${encodeURIComponent(bookId)}/history`), init);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { success: false, error: body?.error ?? 'Failed to load history' };
+  }
+  return { success: true, data: body.data };
+}

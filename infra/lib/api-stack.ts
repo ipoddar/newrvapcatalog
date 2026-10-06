@@ -16,6 +16,7 @@ export interface ApiStackProps extends cdk.StackProps {
   catalogTable: dynamodb.Table;
   checkoutsTable: dynamodb.Table;
   bookRequestsTable: dynamodb.Table;
+  historyTable: dynamodb.Table;
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
   sesFromAddress: string;
@@ -30,12 +31,13 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { catalogTable, checkoutsTable, bookRequestsTable, userPool, userPoolClient, sesFromAddress, siteUrl } = props;
+    const { catalogTable, checkoutsTable, bookRequestsTable, historyTable, userPool, userPoolClient, sesFromAddress, siteUrl } = props;
 
     const commonEnv = {
       CATALOG_TABLE_NAME: catalogTable.tableName,
       CHECKOUTS_TABLE_NAME: checkoutsTable.tableName,
       BOOK_REQUESTS_TABLE_NAME: bookRequestsTable.tableName,
+      HISTORY_TABLE_NAME: historyTable.tableName,
       SES_FROM_ADDRESS: sesFromAddress,
       USER_POOL_ID: userPool.userPoolId,
       USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
@@ -69,6 +71,7 @@ export class ApiStack extends cdk.Stack {
     const adminSetPasswordFn = makeFunction('AdminSetPasswordFn', 'adminSetPassword.ts');
     const requestBookFn = makeFunction('RequestBookFn', 'requestBook.ts');
     const notifyHolderFn = makeFunction('NotifyHolderFn', 'notifyHolder.ts');
+    const getBookHistoryFn = makeFunction('GetBookHistoryFn', 'getBookHistory.ts');
 
     // Not API-routed — invoked only by the daily EventBridge schedule below.
     const sendOverdueRemindersFn = makeFunction(
@@ -83,9 +86,11 @@ export class ApiStack extends cdk.Stack {
 
     catalogTable.grantReadWriteData(checkoutBookFn);
     checkoutsTable.grantWriteData(checkoutBookFn);
+    historyTable.grantWriteData(checkoutBookFn);
     catalogTable.grantReadWriteData(returnBookFn);
     checkoutsTable.grantReadWriteData(returnBookFn);
     bookRequestsTable.grantReadWriteData(returnBookFn);
+    historyTable.grantWriteData(returnBookFn);
 
     catalogTable.grantReadWriteData(createItemFn);
     catalogTable.grantReadWriteData(updateItemFn);
@@ -109,9 +114,13 @@ export class ApiStack extends cdk.Stack {
     checkoutsTable.grantReadData(requestBookFn);
     catalogTable.grantReadData(requestBookFn);
     bookRequestsTable.grantReadWriteData(requestBookFn);
+    historyTable.grantWriteData(requestBookFn);
     checkoutsTable.grantReadData(notifyHolderFn);
     catalogTable.grantReadData(notifyHolderFn);
     notifyHolderFn.addToRolePolicy(sesSendPolicy);
+
+    // Admin history view: read-only access to a single book's event log.
+    historyTable.grantReadData(getBookHistoryFn);
 
     // Admin user directory: reads all Cognito users plus every checkout
     // and pending request, joined against the Catalog table for titles.
@@ -167,6 +176,7 @@ export class ApiStack extends cdk.Stack {
     // expireHolds.ts / lib/bookRequests.ts).
     catalogTable.grantReadWriteData(expireHoldsFn);
     bookRequestsTable.grantReadWriteData(expireHoldsFn);
+    historyTable.grantWriteData(expireHoldsFn);
     expireHoldsFn.addToRolePolicy(sesSendPolicy);
     new events.Rule(this, 'ExpireHoldsScheduleRule', {
       schedule: events.Schedule.rate(cdk.Duration.days(1)),
@@ -257,6 +267,11 @@ export class ApiStack extends cdk.Stack {
       '/catalog/{id}/notify-holder',
       [apigatewayv2.HttpMethod.POST],
       notifyHolderFn
+    );
+    authorizedRoute(
+      '/catalog/{id}/history',
+      [apigatewayv2.HttpMethod.GET],
+      getBookHistoryFn
     );
     authorizedRoute('/admin/users', [apigatewayv2.HttpMethod.GET], getUsersFn);
     authorizedRoute('/admin/users', [apigatewayv2.HttpMethod.POST], adminCreateUserFn);

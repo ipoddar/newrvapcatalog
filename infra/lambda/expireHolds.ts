@@ -1,6 +1,7 @@
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, CATALOG_TABLE } from './lib/dynamo';
 import { promoteNextRequester } from './lib/bookRequests';
+import { recordHistoryEvent } from './lib/history';
 
 async function scanExpiredHolds() {
   const items: Record<string, unknown>[] = [];
@@ -34,6 +35,13 @@ export async function handler(): Promise<void> {
   for (const book of expired) {
     const bookId = String(book.id);
     const title = (book.title as string) ?? 'this book';
+    await recordHistoryEvent({
+      bookId,
+      eventType: 'hold_expired',
+      userId: book.holdForUserId as string | undefined,
+      userName: (book.holdForUserName as string) ?? '',
+      userEmail: (book.holdForUserEmail as string) ?? '',
+    });
     await promoteNextRequester(bookId, title);
   }
 }

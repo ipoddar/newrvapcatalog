@@ -5,6 +5,7 @@ import { ddb, CATALOG_TABLE, CHECKOUTS_TABLE, BOOK_REQUESTS_TABLE } from './lib/
 import { requireAuth, HttpError } from './lib/auth';
 import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
+import { recordHistoryEvent } from './lib/history';
 
 export async function handler(
   event: APIGatewayProxyEventV2WithJWTAuthorizer
@@ -55,6 +56,14 @@ export async function handler(
       }
       throw err;
     }
+
+    await recordHistoryEvent({
+      bookId,
+      eventType: 'requested',
+      userId: sub,
+      userName: (claims.name as string) ?? '',
+      userEmail: (claims.email as string) ?? '',
+    });
 
     return json(201, { success: true, data: { title } });
   });

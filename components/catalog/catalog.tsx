@@ -13,14 +13,15 @@ import { ConfirmDeleteModal } from "../ui/confirm-delete-modal";
 import { EditItemModal, EditableItem } from "../ui/edit-item-modal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { useState, useEffect } from "react";
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, History } from "lucide-react";
 import { PencilIcon, TrashIcon, ReturnIcon, CheckoutIcon, InfoIcon } from "../icons";
 import { BellRing } from "lucide-react";
-import { deleteProduct, updateProduct, checkoutBook, returnBook, requestBook } from "../../app/(dashboard)/actions";
+import { deleteProduct, updateProduct, checkoutBook, returnBook, requestBook, getBookHistory } from "../../app/(dashboard)/actions";
 import { SORT_COLUMNS, type SortColumn } from "../../lib/catalog-sort";
 import { MultiSelectDropdown, type MultiSelectOption } from "../ui/multi-select-dropdown";
 import { LoginGateModal } from "../ui/login-gate-modal";
 import { useLoginGate } from "../use-login-gate";
+import { BookHistoryModal, type BookHistoryEvent } from "../ui/book-history-modal";
 
 interface Order {
   number: number;
@@ -111,6 +112,12 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
   const [requestStates, setRequestStates] = useState<{ [key: string]: boolean }>({});
   const [showCheckoutDetails, setShowCheckoutDetails] = useState<{ [key: string]: boolean }>({});
   const { isGateOpen, withLoginGate, handleGateSuccess, handleGateClose } = useLoginGate();
+
+  const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyBookTitle, setHistoryBookTitle] = useState("");
+  const [historyEvents, setHistoryEvents] = useState<BookHistoryEvent[]>([]);
+  const [isHistoryLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
 
   // Since data is already a flat array when passed from products-page-client,
   // we don't need to navigate nested properties
@@ -203,6 +210,31 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
     setSelectedOrderId(id);
     setSelectedOrderTitle(title);
     setDeleteModalOpen(true);
+  };
+
+  const handleViewHistory = async (id: string, title: string) => {
+    setHistoryBookTitle(title);
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const result = await getBookHistory(id);
+      if (result.success) {
+        setHistoryEvents((result.data as BookHistoryEvent[]) ?? []);
+      } else {
+        setHistoryError(result.error);
+      }
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Failed to load history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const closeHistoryModal = () => {
+    setHistoryModalOpen(false);
+    setHistoryEvents([]);
+    setHistoryError("");
   };
 
   const handleConfirmDelete = async () => {
@@ -449,13 +481,20 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
                   )}
                   {isAdmin && (
                     <>
-                      <div 
+                      <div
+                        title="View history"
+                        className="hover:bg-gray-200 p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer"
+                        onClick={() => handleViewHistory(order.id, order.title)}
+                      >
+                        <History className="h-4 w-4" color="#6b7280" />
+                      </div>
+                      <div
                         className="hover:bg-yellow-500 p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer"
                         onClick={() => handleEdit(order)}
                       >
                         <PencilIcon height={16} color="#6b7280"></PencilIcon>
                       </div>
-                      <div 
+                      <div
                         className="hover:bg-red-500 p-2 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer"
                         onClick={() => handleDelete(order.id, order.title)}
                       >
@@ -832,13 +871,24 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
                         )}
                         {isAdmin && (
                           <>
-                            <div 
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className="hover:bg-gray-200 p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ml-1"
+                                  onClick={() => handleViewHistory(order.id, order.title)}
+                                >
+                                  <History className="h-3.5 w-3.5" color="#6b7280" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>View history</TooltipContent>
+                            </Tooltip>
+                            <div
                               className="hover:bg-yellow-500 p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer ml-1"
                               onClick={() => handleEdit(order)}
                             >
                               <PencilIcon height={14} color="#6b7280"></PencilIcon>
                             </div>
-                            <div 
+                            <div
                               className="hover:bg-red-500 p-1 border-[#6b7280] border rounded flex justify-center items-center transition duration-300 cursor-pointer"
                               onClick={() => handleDelete(order.id, order.title)}
                             >
@@ -890,6 +940,15 @@ export default function Catalog({ data, isAdmin = false, sortColumn = null, sort
         isOpen={isGateOpen}
         onClose={handleGateClose}
         onSuccess={handleGateSuccess}
+      />
+
+      <BookHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={closeHistoryModal}
+        bookTitle={historyBookTitle}
+        events={historyEvents}
+        isLoading={isHistoryLoading}
+        error={historyError}
       />
     </div>
     </TooltipProvider>

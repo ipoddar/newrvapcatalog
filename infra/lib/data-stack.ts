@@ -6,6 +6,7 @@ export class DataStack extends cdk.Stack {
   public readonly catalogTable: dynamodb.Table;
   public readonly checkoutsTable: dynamodb.Table;
   public readonly bookRequestsTable: dynamodb.Table;
+  public readonly historyTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -29,6 +30,18 @@ export class DataStack extends cdk.Stack {
     this.bookRequestsTable = new dynamodb.Table(this, 'BookRequestsTable', {
       partitionKey: { name: 'bookId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'requesterUserId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // Append-only log of checkout/return/request/hold events per book —
+    // distinct from Checkouts (current state only) and BookRequests
+    // (pending queue only), so admins can see who held/wanted a book in
+    // the past, not just right now. eventAt as sort key gives a natural
+    // chronological order per book via a single Query.
+    this.historyTable = new dynamodb.Table(this, 'HistoryTable', {
+      partitionKey: { name: 'bookId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'eventAt', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });

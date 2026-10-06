@@ -7,6 +7,7 @@ import { isWarmerPing } from './lib/warmer';
 import { handle, json, warm } from './lib/http';
 import { sendEmail } from './lib/email';
 import { promoteNextRequester } from './lib/bookRequests';
+import { recordHistoryEvent } from './lib/history';
 
 async function sendReturnConfirmation(bookId: string, userEmail: string): Promise<string> {
   const book = await ddb.send(
@@ -50,9 +51,20 @@ export async function handler(
       await ddb.send(
         new DeleteCommand({ TableName: CHECKOUTS_TABLE, Key: { bookId } })
       );
+      const returnedUserId = (existing.Item.userId as string) ?? '';
+      const returnedUserName = (existing.Item.userName as string) ?? '';
       const userEmail = (existing.Item.userEmail as string) ?? '';
       const title = await sendReturnConfirmation(bookId, userEmail);
-      await promoteNextRequester(bookId, title);
+      await Promise.all([
+        promoteNextRequester(bookId, title),
+        recordHistoryEvent({
+          bookId,
+          eventType: 'returned',
+          userId: returnedUserId,
+          userName: returnedUserName,
+          userEmail,
+        }),
+      ]);
       return json(200, { success: true });
     }
 
@@ -74,7 +86,16 @@ export async function handler(
 
     const userEmail = (claims.email as string) ?? '';
     const title = await sendReturnConfirmation(bookId, userEmail);
-    await promoteNextRequester(bookId, title);
+    await Promise.all([
+      promoteNextRequester(bookId, title),
+      recordHistoryEvent({
+        bookId,
+        eventType: 'returned',
+        userId: sub,
+        userName: (claims.name as string) ?? '',
+        userEmail,
+      }),
+    ]);
 
     return json(200, { success: true });
   });
