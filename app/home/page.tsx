@@ -136,6 +136,7 @@ export default function HomePage() {
 
   return (
     <div className="">
+      <img src="logo.svg" height={1000} width={1000} className='-left-100 fixed -z-10'></img>
       <div className="container mx-auto px-4 py-8">
         {/* Welcome Section */}
         <div className="text-center mb-12">
